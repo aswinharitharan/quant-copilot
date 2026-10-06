@@ -2,7 +2,7 @@
 
 > **Purpose**: Read this file at the start of any new chat session to instantly restore full project context with minimal token usage.  
 > **Last Updated**: 2026-10-06  
-> **Current Active Phase**: Phase 1 (Core Quant & Execution Engine) - READY FOR KICKOFF  
+> **Current Active Phase**: Phase 1 (Core Quant & Execution Engine) - IN PROGRESS (Step 1 Complete)  
 
 ---
 
@@ -19,7 +19,7 @@
 | Phase | Milestone Name | Status | Next Milestone |
 | :--- | :--- | :--- | :--- |
 | **Phase 0** | Architecture, Scaffolding, Documentation & Basement | ✅ Complete | Ready for Phase 1 implementation |
-| **Phase 1** | Quant Engine, Backtester, Paper Broker & Risk Sentinel | 🔄 Ready to Start | Milestone 1.1: Strategy DSL & Data Feed |
+| **Phase 1** | Quant Engine, Backtester, Paper Broker & Risk Sentinel | 🔄 In Progress | Milestone 1.2: Historical Data Feed & Caching |
 | **Phase 2** | Skills & MCP Modularization | ⏳ Pending | Expose Engine as MCP Server |
 | **Phase 3** | Web App Platform (Chat Copilot + Visual Dynamic Canvas) | ⏳ Pending | Full-stack Web UI Development |
 | **Phase 4** | Consumer Marketplace & Strategy Recommendation Engine | ⏳ Pending | Investor matching algorithm & catalog |
@@ -54,8 +54,9 @@
 
 ## 🎯 Next Immediate Action Items (For the Next Chat Window)
 
-When starting Phase 1 in the new window:
-1. **Implement `src/schema/strategy.py`**:
+When starting in the new window, focus on **Phase 1, Step 2**:
+
+1. **~~Implement `src/schema/strategy.py`~~** (✅ DONE):
    - Pydantic models for `Leg`, `ConditionNode`, `StrategySet`, `DeploymentSettings`, and `StrategyDefinition`.
 2. **Implement `src/engine/data_feed.py`**:
    - Historical candle fetcher with high-speed Parquet local cache.
