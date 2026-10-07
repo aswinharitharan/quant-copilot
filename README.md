@@ -28,6 +28,7 @@ quant-copilot/
 │   ├── risk/                    <-- Risk Sentinel (Kill-switch, Drawdown guards)
 │   └── mcp/                     <-- Model Context Protocol tool endpoints
 ├── tests/                       <-- Unit & integration tests
+├── learning/                    <-- Educational breakdowns of code and quant architecture
 ├── config/                      <-- Market settings & credentials template
 └── README.md                    <-- Getting started & system overview
 ```
