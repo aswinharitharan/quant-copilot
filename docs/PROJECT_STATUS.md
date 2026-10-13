@@ -19,7 +19,7 @@
 | Phase | Milestone Name | Status | Next Milestone |
 | :--- | :--- | :--- | :--- |
 | **Phase 0** | Architecture, Scaffolding, Documentation & Basement | ✅ Complete | Ready for Phase 1 implementation |
-| **Phase 1** | Quant Engine, Backtester, Paper Broker & Risk Sentinel | 🔄 In Progress | Milestone 1.2: Historical Data Feed & Caching |
+| **Phase 1** | Quant Engine, Backtester, Paper Broker & Risk Sentinel | 🔄 In Progress | Milestone 1.3: Deterministic Backtest Engine (Step 2B) |
 | **Phase 2** | Skills & MCP Modularization | ⏳ Pending | Expose Engine as MCP Server |
 | **Phase 3** | Web App Platform (Chat Copilot + Visual Dynamic Canvas) | ⏳ Pending | Full-stack Web UI Development |
 | **Phase 4** | Consumer Marketplace & Strategy Recommendation Engine | ⏳ Pending | Investor matching algorithm & catalog |
@@ -27,6 +27,7 @@
 ---
 
 ## 📋 Architectural Decisions & Insights Log
+
 
 1. **Declarative Strategy DSL over Raw Code Generation**
    - LLMs generate structured Pydantic models (Sets, Conditions, Legs, Universal Exit), NOT arbitrary Python execution scripts. Guarantees safety, syntax validity, and prevents lookahead bias.
@@ -69,14 +70,17 @@ We execute Phase 1 in clear, self-contained chunks:
 
 1. **Step 1: Canonical Strategy Schema** (✅ COMPLETE)
    - [`src/schema/strategy.py`](file:///Users/aswinkarthik.th/.gemini/antigravity-ide/scratch/quant-copilot/src/schema/strategy.py) + [`tests/test_strategy_schema.py`](file:///Users/aswinkarthik.th/.gemini/antigravity-ide/scratch/quant-copilot/tests/test_strategy_schema.py) (4/4 passing).
-2. **Step 2A: Historical Data Feed & Caching** (🔄 NEXT UP)
-   - `src/engine/data_feed.py` (`BaseDataProvider`, `YFinanceProvider` for offline-first dev, Parquet cache, multi-timeframe resampling).
-   - `src/engine/expiry_calendar.py` (NSE last-Thursday expiry rules, holiday adjustment, DTE calculation).
-   - `tests/test_data_feed.py` & `tests/test_expiry_calendar.py`.
-3. **Step 2B: Deterministic Backtest Engine**
+2. **Step 2A: Historical Data Feed & Caching** (✅ COMPLETE)
+   - [`src/engine/data_feed.py`](file:///Users/aswinkarthik.th/.gemini/antigravity-ide/scratch/quant-copilot/src/engine/data_feed.py) (`BaseDataProvider`, `DataFeed`, Parquet cache, multi-timeframe resampling).
+   - [`src/engine/providers/yfinance_provider.py`](file:///Users/aswinkarthik.th/.gemini/antigravity-ide/scratch/quant-copilot/src/engine/providers/yfinance_provider.py) (Offline-first / dev provider).
+   - [`src/engine/expiry_calendar.py`](file:///Users/aswinkarthik.th/.gemini/antigravity-ide/scratch/quant-copilot/src/engine/expiry_calendar.py) + [`config/nse_holidays.csv`](file:///Users/aswinkarthik.th/.gemini/antigravity-ide/scratch/quant-copilot/config/nse_holidays.csv) (NSE last-Thursday expiry rules, holiday adjustment, DTE calculation).
+   - Tests: [`tests/test_data_feed.py`](file:///Users/aswinkarthik.th/.gemini/antigravity-ide/scratch/quant-copilot/tests/test_data_feed.py) & [`tests/test_expiry_calendar.py`](file:///Users/aswinkarthik.th/.gemini/antigravity-ide/scratch/quant-copilot/tests/test_expiry_calendar.py) (16/16 tests passing).
+   - Educational Lesson: [`learning/02_historical_data_feed_and_caching.md`](file:///Users/aswinkarthik.th/.gemini/antigravity-ide/scratch/quant-copilot/learning/02_historical_data_feed_and_caching.md).
+3. **Step 2B: Deterministic Backtest Engine** (🔄 NEXT UP)
    - `src/engine/backtester.py` (Condition evaluator, STT, exchange turnover fees, GST, stamp duty, slippage buffer, CAGR/Sharpe/Drawdown metrics).
 4. **Step 2C: Paper Broker & Risk Sentinel**
    - `src/brokers/paper_broker.py` & `src/risk/sentinel.py` (Virtual order execution, tick subscriber, Max Daily Loss kill-switch).
 5. **Step 2D: Batch Stress Test & Benchmark Validation**
    - 50–100 strategy programmatic stress-test battery + official Nestle India 200 SMA E2E backtest.
+
 

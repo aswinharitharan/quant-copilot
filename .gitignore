@@ -26,5 +26,6 @@ htmlcov/
 
 # Data caches
 *.parquet
-*.csv
 data/
+!config/*.csv
+
