@@ -47,23 +47,36 @@
      - **Market Open Gate**: Delay first trade check until 9:20 AM to avoid 9:15 AM opening spread traps.
 
 5. **F&O Historical Data Strategy**
-   - **Equities & Futures**: Multi-year 1-minute historical data cached in `.parquet` format.
-   - **Options**: Curated Nifty/BankNifty 1-minute options archives + Spot-driven Black-Scholes Greeks model for prototyping + Daily live tick recording via DhanHQ to grow a proprietary database.
+   - **Equities & Futures**: Multi-year 1-minute historical data cached locally in `.parquet` format (compressed, fast I/O, strict datetime types). Excluded from Git (`data/` in `.gitignore`) to prevent repo bloat.
+   - **Daily Data**: Free deep history (20+ years back to listing date) via yfinance & DhanHQ for long-term positional backtests.
+   - **Options Reality**: Curated Nifty/BankNifty 1-minute options archives + Spot-driven Black-Scholes Greeks model for prototyping + Daily live tick recording via DhanHQ WebSocket to build a proprietary options database over time.
 
 6. **Golden Integration Benchmark Strategy (`docs/BENCHMARK_STRATEGY_NESTLEIND_200SMA.md`)**
    - **Nestle India SMA 200 (Tradetron ID: 10038358)**: 15m candles, 200 SMA on NSE Stock Futures with dual-contract handover (DTE <= 6 days handover, DTE <= 1 day safety exit, OPEN_POSITIONS == 0 guard). Used as the end-to-end integration and backtest validation target.
 
+7. **Two-Stage QA & Product Quality Testing Strategy**
+   - **Stage 1 (Before MCP / End of Phase 1)**: Programmatic batch stress test (`scripts/run_batch_test.py`) running 50–100 algorithmic strategy variations (trend following, mean reversion, opening range breakouts, short straddles, edge cases) directly through the Python engine to mathematically prove zero crashes, zero lookahead bias, and precise transaction cost calculations.
+   - **Stage 2 (After MCP / Phase 2)**: Natural language conversational testing in chat to verify LLM translation accuracy, prompt flexibility, and MCP tool execution.
+
+8. **Market Scanner / Screener Capabilities (Roadmap)**
+   - The declarative `ConditionTree` (`ConditionGroup`, `ConditionNode`) naturally supports market screening (e.g., 52-week high, EMA crossovers) across Nifty 50/500 constituents on the latest candles. Planned as a first-class feature in Phase 2/3.
+
 ---
 
-## 🎯 Next Immediate Action Items (For the Next Chat Window)
+## 🎯 Phase 1 Detailed Execution Slices
 
-When starting in the new window, focus on **Phase 1, Step 2**:
+We execute Phase 1 in clear, self-contained chunks:
 
-1. **~~Implement `src/schema/strategy.py`~~** (✅ DONE):
-   - Pydantic models for `Leg`, `ConditionNode`, `StrategySet`, `DeploymentSettings`, and `StrategyDefinition`.
-2. **Implement `src/engine/data_feed.py`**:
-   - Historical candle fetcher with high-speed Parquet local cache.
-3. **Implement `src/engine/backtester.py`**:
-   - Deterministic backtester accounting for STT, exchange turnover fees, and slippage buffer.
-4. **Implement `src/brokers/paper_broker.py` & `src/risk/sentinel.py`**:
-   - Virtual order execution loop and Max Daily Loss emergency kill-switch.
+1. **Step 1: Canonical Strategy Schema** (✅ COMPLETE)
+   - [`src/schema/strategy.py`](file:///Users/aswinkarthik.th/.gemini/antigravity-ide/scratch/quant-copilot/src/schema/strategy.py) + [`tests/test_strategy_schema.py`](file:///Users/aswinkarthik.th/.gemini/antigravity-ide/scratch/quant-copilot/tests/test_strategy_schema.py) (4/4 passing).
+2. **Step 2A: Historical Data Feed & Caching** (🔄 NEXT UP)
+   - `src/engine/data_feed.py` (`BaseDataProvider`, `YFinanceProvider` for offline-first dev, Parquet cache, multi-timeframe resampling).
+   - `src/engine/expiry_calendar.py` (NSE last-Thursday expiry rules, holiday adjustment, DTE calculation).
+   - `tests/test_data_feed.py` & `tests/test_expiry_calendar.py`.
+3. **Step 2B: Deterministic Backtest Engine**
+   - `src/engine/backtester.py` (Condition evaluator, STT, exchange turnover fees, GST, stamp duty, slippage buffer, CAGR/Sharpe/Drawdown metrics).
+4. **Step 2C: Paper Broker & Risk Sentinel**
+   - `src/brokers/paper_broker.py` & `src/risk/sentinel.py` (Virtual order execution, tick subscriber, Max Daily Loss kill-switch).
+5. **Step 2D: Batch Stress Test & Benchmark Validation**
+   - 50–100 strategy programmatic stress-test battery + official Nestle India 200 SMA E2E backtest.
+
