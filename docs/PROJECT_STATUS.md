@@ -50,6 +50,9 @@
    - **Equities & Futures**: Multi-year 1-minute historical data cached in `.parquet` format.
    - **Options**: Curated Nifty/BankNifty 1-minute options archives + Spot-driven Black-Scholes Greeks model for prototyping + Daily live tick recording via DhanHQ to grow a proprietary database.
 
+6. **Golden Integration Benchmark Strategy (`docs/BENCHMARK_STRATEGY_NESTLEIND_200SMA.md`)**
+   - **Nestle India SMA 200 (Tradetron ID: 10038358)**: 15m candles, 200 SMA on NSE Stock Futures with dual-contract handover (DTE <= 6 days handover, DTE <= 1 day safety exit, OPEN_POSITIONS == 0 guard). Used as the end-to-end integration and backtest validation target.
+
 ---
 
 ## 🎯 Next Immediate Action Items (For the Next Chat Window)
