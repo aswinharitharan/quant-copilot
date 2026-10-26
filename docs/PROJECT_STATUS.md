@@ -19,7 +19,7 @@
 | Phase | Milestone Name | Status | Next Milestone |
 | :--- | :--- | :--- | :--- |
 | **Phase 0** | Architecture, Scaffolding, Documentation & Basement | ✅ Complete | Ready for Phase 1 implementation |
-| **Phase 1** | Quant Engine, Backtester, Paper Broker & Risk Sentinel | 🔄 In Progress | Milestone 1.3: Deterministic Backtest Engine (Step 2B) |
+| **Phase 1** | Quant Engine, Backtester, Paper Broker & Risk Sentinel | 🔄 In Progress | Milestone 1.4: Paper Broker & Risk Sentinel (Step 2C) |
 | **Phase 2** | Skills & MCP Modularization | ⏳ Pending | Expose Engine as MCP Server |
 | **Phase 3** | Web App Platform (Chat Copilot + Visual Dynamic Canvas) | ⏳ Pending | Full-stack Web UI Development |
 | **Phase 4** | Consumer Marketplace & Strategy Recommendation Engine | ⏳ Pending | Investor matching algorithm & catalog |
@@ -76,9 +76,14 @@ We execute Phase 1 in clear, self-contained chunks:
    - [`src/engine/expiry_calendar.py`](file:///Users/aswinkarthik.th/.gemini/antigravity-ide/scratch/quant-copilot/src/engine/expiry_calendar.py) + [`config/nse_holidays.csv`](file:///Users/aswinkarthik.th/.gemini/antigravity-ide/scratch/quant-copilot/config/nse_holidays.csv) (NSE last-Thursday expiry rules, holiday adjustment, DTE calculation).
    - Tests: [`tests/test_data_feed.py`](file:///Users/aswinkarthik.th/.gemini/antigravity-ide/scratch/quant-copilot/tests/test_data_feed.py) & [`tests/test_expiry_calendar.py`](file:///Users/aswinkarthik.th/.gemini/antigravity-ide/scratch/quant-copilot/tests/test_expiry_calendar.py) (16/16 tests passing).
    - Educational Lesson: [`learning/02_historical_data_feed_and_caching.md`](file:///Users/aswinkarthik.th/.gemini/antigravity-ide/scratch/quant-copilot/learning/02_historical_data_feed_and_caching.md).
-3. **Step 2B: Deterministic Backtest Engine** (🔄 NEXT UP)
-   - `src/engine/backtester.py` (Condition evaluator, STT, exchange turnover fees, GST, stamp duty, slippage buffer, CAGR/Sharpe/Drawdown metrics).
-4. **Step 2C: Paper Broker & Risk Sentinel**
+3. **Step 2B: Deterministic Backtest Engine** (✅ COMPLETE)
+   - [`src/engine/indicators.py`](file:///Users/aswinkarthik.th/.gemini/antigravity-ide/scratch/quant-copilot/src/engine/indicators.py) (Pure vectorized SMA, EMA, RSI, VWAP, ATR, Supertrend).
+   - [`src/engine/condition_evaluator.py`](file:///Users/aswinkarthik.th/.gemini/antigravity-ide/scratch/quant-copilot/src/engine/condition_evaluator.py) (Anti-lookahead ConditionTree evaluator with shift(1) crossing logic).
+   - [`src/engine/costs.py`](file:///Users/aswinkarthik.th/.gemini/antigravity-ide/scratch/quant-copilot/src/engine/costs.py) (Indian market STT, exchange fees, GST, SEBI, stamp duty, slippage).
+   - [`src/engine/backtester.py`](file:///Users/aswinkarthik.th/.gemini/antigravity-ide/scratch/quant-copilot/src/engine/backtester.py) & [`src/schema/backtest_models.py`](file:///Users/aswinkarthik.th/.gemini/antigravity-ide/scratch/quant-copilot/src/schema/backtest_models.py) (Bar-by-bar execution loop, intraday/positional lifecycle, circuit breakers).
+   - [`src/engine/metrics.py`](file:///Users/aswinkarthik.th/.gemini/antigravity-ide/scratch/quant-copilot/src/engine/metrics.py) (CAGR, Sharpe, Sortino, Calmar, Max Drawdown, Win Rate, Expectancy).
+   - Tests: [`tests/test_indicators.py`](file:///Users/aswinkarthik.th/.gemini/antigravity-ide/scratch/quant-copilot/tests/test_indicators.py), [`tests/test_condition_evaluator.py`](file:///Users/aswinkarthik.th/.gemini/antigravity-ide/scratch/quant-copilot/tests/test_condition_evaluator.py), [`tests/test_costs.py`](file:///Users/aswinkarthik.th/.gemini/antigravity-ide/scratch/quant-copilot/tests/test_costs.py), [`tests/test_metrics.py`](file:///Users/aswinkarthik.th/.gemini/antigravity-ide/scratch/quant-copilot/tests/test_metrics.py), [`tests/test_backtester.py`](file:///Users/aswinkarthik.th/.gemini/antigravity-ide/scratch/quant-copilot/tests/test_backtester.py) (20/20 new tests, 36/36 total suite passing).
+4. **Step 2C: Paper Broker & Risk Sentinel** (🔄 NEXT UP)
    - `src/brokers/paper_broker.py` & `src/risk/sentinel.py` (Virtual order execution, tick subscriber, Max Daily Loss kill-switch).
 5. **Step 2D: Batch Stress Test & Benchmark Validation**
    - 50–100 strategy programmatic stress-test battery + official Nestle India 200 SMA E2E backtest.
