@@ -1,15 +1,18 @@
 # QuantCopilot Living Status & Context Registry
 
 > **Purpose**: Read this file at the start of any new chat session to instantly restore full project context with minimal token usage.  
-> **Last Updated**: 2026-10-06  
-> **Current Active Phase**: Phase 1 (Core Quant & Execution Engine) - IN PROGRESS (Step 1 Complete)  
+> **Last Updated**: 2026-11-05  
+> **Current Active Phase**: Phase 1 (Core Quant & Execution Engine) - Backtest & Broker Data Complete; Benchmark Validated (57/57 tests passing)  
 
 ---
 
 ## 📌 Executive Summary
 - **Product**: Autonomous AI Quant Strategy Studio & Investor Marketplace.
 - **Target Market**: Indian Equities, Futures & Options (NSE/MCX).
-- **Primary Broker Integration**: **Dhan (DhanHQ)** (Free APIs & Historical Data) + Local **PaperBroker**.
+- **Primary Broker Integrations**:
+  - **Angel One (SmartAPI)**: 100% Free broker-grade historical data (10+ years depth, 15m/1m OHLCV, automated 2FA TOTP login via `pyotp`). Primary market data feed.
+  - **Dhan (DhanHQ)**: Trading API integration (execution and account management).
+  - **Local PaperBroker**: Virtual low-latency execution engine for forward testing.
 - **Architecture**: Conversational AI Copilot -> Declarative Strategy DSL -> Deterministic Backtester -> Deployment Handshake -> Risk Sentinel -> Broker Adapter -> MCP Servers -> Dual-Pane Web UI.
 
 ---
@@ -72,20 +75,25 @@ We execute Phase 1 in clear, self-contained chunks:
    - [`src/schema/strategy.py`](file:///Users/aswinkarthik.th/.gemini/antigravity-ide/scratch/quant-copilot/src/schema/strategy.py) + [`tests/test_strategy_schema.py`](file:///Users/aswinkarthik.th/.gemini/antigravity-ide/scratch/quant-copilot/tests/test_strategy_schema.py) (4/4 passing).
 2. **Step 2A: Historical Data Feed & Caching** (✅ COMPLETE)
    - [`src/engine/data_feed.py`](file:///Users/aswinkarthik.th/.gemini/antigravity-ide/scratch/quant-copilot/src/engine/data_feed.py) (`BaseDataProvider`, `DataFeed`, Parquet cache, multi-timeframe resampling).
-   - [`src/engine/providers/yfinance_provider.py`](file:///Users/aswinkarthik.th/.gemini/antigravity-ide/scratch/quant-copilot/src/engine/providers/yfinance_provider.py) (Offline-first / dev provider).
+   - [`src/engine/providers/angel_provider.py`](file:///Users/aswinkarthik.th/.gemini/antigravity-ide/scratch/quant-copilot/src/engine/providers/angel_provider.py) (Angel One SmartAPI: 100% Free broker-grade feed, 10+ yr depth, automated TOTP login, exponential rate-limit backoff, token resolution).
+   - [`src/engine/providers/dhan_provider.py`](file:///Users/aswinkarthik.th/.gemini/antigravity-ide/scratch/quant-copilot/src/engine/providers/dhan_provider.py) (DhanHQ provider).
+   - [`src/engine/providers/yfinance_provider.py`](file:///Users/aswinkarthik.th/.gemini/antigravity-ide/scratch/quant-copilot/src/engine/providers/yfinance_provider.py) (Offline fallback provider).
    - [`src/engine/expiry_calendar.py`](file:///Users/aswinkarthik.th/.gemini/antigravity-ide/scratch/quant-copilot/src/engine/expiry_calendar.py) + [`config/nse_holidays.csv`](file:///Users/aswinkarthik.th/.gemini/antigravity-ide/scratch/quant-copilot/config/nse_holidays.csv) (NSE last-Thursday expiry rules, holiday adjustment, DTE calculation).
-   - Tests: [`tests/test_data_feed.py`](file:///Users/aswinkarthik.th/.gemini/antigravity-ide/scratch/quant-copilot/tests/test_data_feed.py) & [`tests/test_expiry_calendar.py`](file:///Users/aswinkarthik.th/.gemini/antigravity-ide/scratch/quant-copilot/tests/test_expiry_calendar.py) (16/16 tests passing).
-   - Educational Lesson: [`learning/02_historical_data_feed_and_caching.md`](file:///Users/aswinkarthik.th/.gemini/antigravity-ide/scratch/quant-copilot/learning/02_historical_data_feed_and_caching.md).
+   - Tests: [`tests/test_data_feed.py`](file:///Users/aswinkarthik.th/.gemini/antigravity-ide/scratch/quant-copilot/tests/test_data_feed.py), [`tests/test_expiry_calendar.py`](file:///Users/aswinkarthik.th/.gemini/antigravity-ide/scratch/quant-copilot/tests/test_expiry_calendar.py), [`tests/test_angel_provider.py`](file:///Users/aswinkarthik.th/.gemini/antigravity-ide/scratch/quant-copilot/tests/test_angel_provider.py), [`tests/test_dhan_provider.py`](file:///Users/aswinkarthik.th/.gemini/antigravity-ide/scratch/quant-copilot/tests/test_dhan_provider.py) (30/30 tests passing).
+   - Multi-year pipeline: [`scripts/fetch_and_export_5yr_nestle.py`](file:///Users/aswinkarthik.th/.gemini/antigravity-ide/scratch/quant-copilot/scripts/fetch_and_export_5yr_nestle.py) (2022–2026, 29,290 candles, 0 unexpected missing days, Excel & Parquet exports).
+   - **Upcoming Planned Enhancement**: Smart Incremental Master Cache (range-aware slicing & delta fetching to prevent duplicate API downloads).
 3. **Step 2B: Deterministic Backtest Engine** (✅ COMPLETE)
    - [`src/engine/indicators.py`](file:///Users/aswinkarthik.th/.gemini/antigravity-ide/scratch/quant-copilot/src/engine/indicators.py) (Pure vectorized SMA, EMA, RSI, VWAP, ATR, Supertrend).
    - [`src/engine/condition_evaluator.py`](file:///Users/aswinkarthik.th/.gemini/antigravity-ide/scratch/quant-copilot/src/engine/condition_evaluator.py) (Anti-lookahead ConditionTree evaluator with shift(1) crossing logic).
    - [`src/engine/costs.py`](file:///Users/aswinkarthik.th/.gemini/antigravity-ide/scratch/quant-copilot/src/engine/costs.py) (Indian market STT, exchange fees, GST, SEBI, stamp duty, slippage).
    - [`src/engine/backtester.py`](file:///Users/aswinkarthik.th/.gemini/antigravity-ide/scratch/quant-copilot/src/engine/backtester.py) & [`src/schema/backtest_models.py`](file:///Users/aswinkarthik.th/.gemini/antigravity-ide/scratch/quant-copilot/src/schema/backtest_models.py) (Bar-by-bar execution loop, intraday/positional lifecycle, circuit breakers).
    - [`src/engine/metrics.py`](file:///Users/aswinkarthik.th/.gemini/antigravity-ide/scratch/quant-copilot/src/engine/metrics.py) (CAGR, Sharpe, Sortino, Calmar, Max Drawdown, Win Rate, Expectancy).
-   - Tests: [`tests/test_indicators.py`](file:///Users/aswinkarthik.th/.gemini/antigravity-ide/scratch/quant-copilot/tests/test_indicators.py), [`tests/test_condition_evaluator.py`](file:///Users/aswinkarthik.th/.gemini/antigravity-ide/scratch/quant-copilot/tests/test_condition_evaluator.py), [`tests/test_costs.py`](file:///Users/aswinkarthik.th/.gemini/antigravity-ide/scratch/quant-copilot/tests/test_costs.py), [`tests/test_metrics.py`](file:///Users/aswinkarthik.th/.gemini/antigravity-ide/scratch/quant-copilot/tests/test_metrics.py), [`tests/test_backtester.py`](file:///Users/aswinkarthik.th/.gemini/antigravity-ide/scratch/quant-copilot/tests/test_backtester.py) (20/20 new tests, 36/36 total suite passing).
-4. **Step 2C: Paper Broker & Risk Sentinel** (🔄 NEXT UP)
+   - Benchmark Implementation & Validation: [`src/strategies/nestle_200_sma.py`](file:///Users/aswinkarthik.th/.gemini/antigravity-ide/scratch/quant-copilot/src/strategies/nestle_200_sma.py) & [`tests/test_benchmark_nestle.py`](file:///Users/aswinkarthik.th/.gemini/antigravity-ide/scratch/quant-copilot/tests/test_benchmark_nestle.py) (Full 57/57 total test suite passing).
+   - Runners & Analyzers: [`scripts/run_nestle_angel_backtest.py`](file:///Users/aswinkarthik.th/.gemini/antigravity-ide/scratch/quant-copilot/scripts/run_nestle_angel_backtest.py), [`scripts/run_nestle_5yr_angel_backtest.py`](file:///Users/aswinkarthik.th/.gemini/antigravity-ide/scratch/quant-copilot/scripts/run_nestle_5yr_angel_backtest.py), [`scripts/add_backtest_to_excel.py`](file:///Users/aswinkarthik.th/.gemini/antigravity-ide/scratch/quant-copilot/scripts/add_backtest_to_excel.py) (exports year-wise metrics & 493-trade log to Excel).
+4. **Step 2C: Smart Incremental Master Cache & Extended Backtests** (🔄 NEXT IN NEW SESSION)
+   - Range-aware cache manager that automatically checks existing Parquet data on disk and only calls broker API for missing time deltas.
+   - Additional strategy backtests and trend filter enhancements.
+5. **Step 2D: Paper Broker & Risk Sentinel**
    - `src/brokers/paper_broker.py` & `src/risk/sentinel.py` (Virtual order execution, tick subscriber, Max Daily Loss kill-switch).
-5. **Step 2D: Batch Stress Test & Benchmark Validation**
-   - 50–100 strategy programmatic stress-test battery + official Nestle India 200 SMA E2E backtest.
 
 

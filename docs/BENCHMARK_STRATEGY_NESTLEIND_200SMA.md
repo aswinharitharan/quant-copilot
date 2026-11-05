@@ -2,7 +2,8 @@
 
 > **Status**: Official Golden Integration Benchmark Strategy  
 > **Source Platform**: Tradetron (Strategy ID: `10038358`)  
-> **Role in QuantCopilot**: Used as the definitive end-to-end integration and backtest validation target for the platform.
+> **Implementation**: `src/strategies/nestle_200_sma.py`  
+> **Role in QuantCopilot**: The definitive end-to-end integration and backtest validation target for the platform.
 
 ---
 
@@ -10,67 +11,150 @@
 
 | Parameter | Specification |
 | :--- | :--- |
-| **Strategy Name** | Nestle India SMA 200 |
-| **Strategy ID** | 10038358 (Tradetron) |
-| **Underlying Asset** | `NSE:NESTLEIND` (Nestle India Stock Futures) |
+| **Strategy Name** | Nestle India SMA 200 Futures Benchmark |
+| **Strategy ID** | `10038358` (Tradetron) |
+| **Signal Instrument** | `NSE:NESTLEIND` (Continuous Stock / Spot Equity Candles) |
+| **Traded Instrument** | `NSE_FNO:NESTLEIND` (Stock Futures, 1 Lot = 25 Shares) |
 | **Timeframe** | 15-Minute Candles (`15m`) |
 | **Primary Indicator** | 200 Simple Moving Average (SMA) on 15m Close |
-| **Execution Style** | Positional Trend Following |
+| **Signal Timing** | `SignalTiming.PREVIOUS_BAR_CLOSE` (Evaluated on closed candle $t-1$, executed at Open of candle $t$) |
+| **Market Open Delay** | `0 Minutes` (Enables prompt 09:15 AM market open execution for overnight signals) |
+| **Execution Style** | Positional Trend Following / Stop-and-Reverse (SAR) |
+| **Max Concurrent Positions** | `1` (`OPEN_POSITIONS == 0` concurrency guard across all 4 sets) |
 | **Rollover Mode** | Coordinated Dual-Contract Handover (No artificial rollover orders) |
+| **Capital Allocation** | ₹5,00,000 (Margin buffer for 1 lot futures) |
 
 ---
 
 ## 2. Executive Summary & Core Mechanics
 
-The **Nestle India SMA 200** strategy is an automated trend-following system designed specifically for **NSE Stock Futures**. It captures sustained momentum by:
-- **Long Entry**: Price trades above 200 SMA on 15-minute candles.
-- **Short Entry**: Price trades below 200 SMA on 15-minute candles.
+The **Nestle India SMA 200** strategy is an automated trend-following and stop-and-reverse system designed for **NSE Stock Futures**. It uses the continuous underlying cash stock price for clean indicator calculations while executing futures contracts for capital efficiency.
 
-### Coordinated Dual-Contract Handover
-Unlike cash equities, Indian stock futures expire on the last Thursday of every month and carry mandatory physical delivery if held to settlement (with exponential margin spikes in expiry week). 
+### Core Signal Rules (Candle Body & Wick Clearance)
+To prevent whipsaw losses from intraday spikes that temporarily breach the moving average without establishing momentum, entry and exit conditions require **full candle body and wick clearance**:
 
-To eliminate delivery risk and avoid illiquidity, the strategy operates a dual-contract handover:
-1. **Current Month Phase ($> 6$ Days to Expiry)**: Trades exclusively in the near-month contract.
-2. **Next Month Phase ($\le 6$ Days to Expiry)**: Automatically shifts all new trades to the next-month contract.
-3. **Flat Position Safety Guard**: Enforces a single active position rule (`OPEN_POSITIONS == 0`) so next-month trades never enter while a current-month position is still open.
-4. **Pre-Expiry Safety Net**: Automatically closes any open current-month position **1 day before expiry** to eliminate physical delivery and settlement risk.
+1. **Long Entry Signal**:
+   - `Close > 200 SMA` **AND** `Low > 200 SMA`
+   - *Rationale*: Both the candle close and the lower wick must trade entirely above the 200 SMA.
+2. **Short Entry Signal**:
+   - `Close < 200 SMA` **AND** `High < 200 SMA`
+   - *Rationale*: Both the candle close and the upper wick must trade entirely below the 200 SMA.
+3. **Long Exit Signal**:
+   - `Close < 200 SMA` **AND** `High < 200 SMA` (or `DTE <= 1` for near-month physical delivery protection).
+   - Symmetrical to the Short Entry condition.
+4. **Short Exit Signal**:
+   - `Close > 200 SMA` **AND** `Low > 200 SMA` (or `DTE <= 1` for near-month physical delivery protection).
+   - Symmetrical to the Long Entry condition.
 
 ---
 
-## 3. Operational Transition Timeline (Example)
+## 3. Coordinated Dual-Contract Handover Architecture
+
+Indian stock futures expire on the last Thursday of each month and require mandatory physical delivery if held past expiry. The strategy eliminates delivery risks and rollover execution friction using a 4-Set coordinated structure:
+
+### Strategy Set Breakdown
+
+| Set ID | Name | Trigger Condition (Signal on $t-1$) | Instrument Traded | Exit Conditions |
+| :---: | :--- | :--- | :--- | :--- |
+| **Set 1** | Near-Month Long | `DTE > 6` AND `Close > 200 SMA` AND `Low > 200 SMA` | Current Month Futures (BUY) | (`Close < SMA` AND `High < SMA`) OR `DTE <= 1` |
+| **Set 2** | Near-Month Short | `DTE > 6` AND `Close < 200 SMA` AND `High < 200 SMA` | Current Month Futures (SELL) | (`Close > SMA` AND `Low > SMA`) OR `DTE <= 1` |
+| **Set 3** | Next-Month Long | `DTE <= 6` AND `Close > 200 SMA` AND `Low > 200 SMA` | Next Month Futures (BUY) | `Close < SMA` AND `High < SMA` |
+| **Set 4** | Next-Month Short | `DTE <= 6` AND `Close < 200 SMA` AND `High < 200 SMA` | Next Month Futures (SELL) | `Close > SMA` AND `Low > SMA` |
+
+### Key Operational Invariants
+1. **Single Position Guard (`OPEN_POSITIONS == 0`)**:
+   - Only 1 position can be active across Sets 1, 2, 3, and 4 at any time.
+   - When DTE drops $\le 6$, next-month sets (3 & 4) do not enter until the active near-month trade completes its exit.
+2. **Pre-Expiry Physical Delivery Safety Net (`DTE <= 1`)**:
+   - Sets 1 and 2 automatically exit if still held 1 day prior to monthly expiry, avoiding margin surges and physical settlement.
+3. **Execution Order on Bar $t$**:
+   - Exits are evaluated and filled first at `bar.open`.
+   - The position counter drops to `0`.
+   - The opposite reversal entry condition evaluates and fills immediately at the same `bar.open`.
+
+### Operational Transition Timeline (Example)
 
 Consider a transition between October and November contracts:
 
 ```
 [Oct 20] 10 Days to Expiry:
-         Current month SMA turns bullish 
+         Current month SMA turns bullish (Close > 200 SMA and Low > 200 SMA)
          --> Set 1 enters BUY October NESTLEIND Futures.
 
 [Oct 24] 6 Days to Expiry (Handover Boundary):
-         Handover threshold reached, but October trade is still active.
-         --> Next-month Sets (3 & 4) remain blocked by (OPEN_POSITIONS == 0) guard.
+         Handover threshold reached (DTE <= 6), but October trade is still active.
+         --> Next-month Sets (3 & 4) remain blocked by (OPEN_POSITIONS == 0) single-position guard.
 
 [Oct 29] 1 Day to Expiry (Pre-Expiry Safety Net):
          Days to Expiry <= 1 triggers
-         --> Set 1 forces EXIT on October contract (avoids physical delivery).
-         --> Account is now FLAT.
+         --> Set 1 forces EXIT on October contract (avoids physical delivery & margin penalties).
+         --> Account is now FLAT (OPEN_POSITIONS == 0).
 
 [Oct 29] Post-Exit Evaluation:
-         Account is now flat. If November contract is bullish on 200 SMA
-         --> Set 3 enters BUY November NESTLEIND Futures.
+         Account is now flat. If market remains bullish on 200 SMA (Close > 200 SMA & Low > 200 SMA)
+         --> Set 3 enters BUY November NESTLEIND Futures on the next bar open.
 
 [Nov 01] New Month Begins:
-         November contract physically becomes active near-month.
-         --> Position continues riding the trend without artificial rollover gaps.
+         November contract physically becomes the active near-month contract.
+         --> Position continues riding the trend without artificial rollover orders or double transaction friction.
 ```
 
 ---
 
-## 4. Platform Engine Capabilities Tested by This Benchmark
+## 4. Signal Timing & Data Architecture
 
-When we run our end-to-end integration test against this strategy, the engine must prove:
-1. **Multi-Timeframe Resampling**: Accurately resampling raw 1-minute historical data into 15-minute OHLCV candles.
-2. **High-Period Indicator Math**: Correctly computing 200 SMA on 15m intervals without lookahead bias.
-3. **NSE F&O Expiry Awareness**: Calculating dynamic Days to Expiry (DTE) for NSE equity derivative monthly expiry calendars.
-4. **Multi-Set Coordination & Guards**: Evaluating multi-set conditions respecting account position states (`OPEN_POSITIONS == 0`).
-5. **Contract Lifecycle Management**: Mapping `MONTHLY` vs `FAR_MONTH` futures contracts dynamically.
+### Signal Timing: `SignalTiming.PREVIOUS_BAR_CLOSE`
+- **Signal Generation ($t-1$)**: Indicators and conditions are evaluated on the closed 15-minute candle.
+- **Execution ($t$)**: Orders are filled at the `open` price of the current candle.
+- **Market Open Gate (`market_open_delay_minutes = 0`)**: Overnight signals generated by the 15:15–15:30 candle are filled immediately at 09:15:00 market open, ensuring zero-gap continuous reversal.
+
+### Spot Candle for Signals vs. Futures for Execution
+- **Signals**: Evaluated against continuous spot equity (`NESTLEIND.NS` / `NSE_EQ`) to guarantee 5+ years of continuous indicator memory free from futures rollover basis distortion.
+- **Execution**: Filled in `NSE_FNO` futures with 1 lot = 25 shares.
+- **Cost Model**: NSE Futures regulatory costs applied:
+  - STT: 0.02% on sell side turnover
+  - Exchange transaction charges: 0.002%
+  - SEBI turnover fee: 0.0001%
+  - Stamp duty: 0.002% on buy side
+  - GST: 18% on transaction charges
+  - Slippage buffer: 0.05%
+
+---
+
+## 5. Verified Empirical Backtest Results (60 Days / 15m)
+
+Tested on 60 days of real 15-minute candles from Yahoo Finance (`NESTLEIND.NS`):
+
+| Metric | Value |
+| :--- | :--- |
+| **Test Period** | 2026-08-31 to 2026-10-26 (945 candles) |
+| **Initial Capital** | ₹5,00,000.00 |
+| **Final Equity** | ₹5,00,977.26 |
+| **Net PnL** | **+₹977.26** (+0.20%) |
+| **Profit Factor** | **1.27** |
+| **Total Completed Trades** | **13** |
+| **Trade Continuum** | 100% continuous Stop-and-Reverse (every exit immediately reversed) |
+| **Total Transaction Friction** | ₹552.74 |
+| **Max Drawdown** | 0.96% (20 days) |
+
+### Sample Trade Execution Chain
+
+```
+Trade 1 (Set 2 Short) : In 2026-09-10 09:30 @ ₹1,394.50  -->  Out 2026-09-22 09:15 @ ₹1,382.40 (+₹258.42 net)
+Trade 2 (Set 3 Long)  : In 2026-09-22 09:15 @ ₹1,382.40  -->  Out 2026-09-22 10:00 @ ₹1,378.50 (-₹141.29 net)
+Trade 3 (Set 4 Short) : In 2026-09-22 10:00 @ ₹1,378.50  -->  Out 2026-09-23 11:00 @ ₹1,382.40 (-₹141.29 net)
+Trade 4 (Set 3 Long)  : In 2026-09-23 11:00 @ ₹1,382.40  -->  Out 2026-09-24 10:00 @ ₹1,372.90 (-₹281.19 net)
+Trade 5 (Set 4 Short) : In 2026-09-24 10:00 @ ₹1,372.90  -->  Out 2026-10-06 15:15 @ ₹1,338.50 (+₹816.91 net)
+```
+
+---
+
+## 6. Regression Test Suite
+Automated unit tests validating these rules reside in [`tests/test_benchmark_nestle.py`](file:///Users/aswinkarthik.th/.gemini/antigravity-ide/scratch/quant-copilot/tests/test_benchmark_nestle.py):
+- `test_nestle_benchmark_schema_validity`: Schema parameters, lot sizing, and execution style.
+- `test_low_wick_filter_blocks_long_entry`: Verifies long entries require `Low > SMA`.
+- `test_high_wick_filter_blocks_short_entry`: Verifies short entries require `High < SMA`.
+- `test_single_position_guard_blocks_concurrent_trades`: Confirms strict 1-position concurrency.
+- `test_previous_candle_signal_fills_on_current_candle_open`: Confirms candle $t-1$ signals fill at candle $t$ open.
+- `test_high_wick_filter_blocks_long_exit`: Verifies long exits require upper wick clearance (`High < SMA`).
+- `test_low_wick_filter_blocks_short_exit`: Verifies short exits require lower wick clearance (`Low > SMA`).

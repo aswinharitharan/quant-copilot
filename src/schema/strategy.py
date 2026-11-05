@@ -75,6 +75,10 @@ class ExecutionStyle(str, Enum):
     INTRADAY = "INTRADAY"        # Positions squared off same day
     POSITIONAL = "POSITIONAL"    # Positions held overnight / multi-day
 
+class SignalTiming(str, Enum):
+    ON_BAR_CLOSE = "ON_BAR_CLOSE"              # Evaluate on current bar close, fill on current bar close
+    PREVIOUS_BAR_CLOSE = "PREVIOUS_BAR_CLOSE"  # Evaluate on previous bar close (t-1), fill on current bar open (t)
+
 class OperandType(str, Enum):
     INDICATOR = "INDICATOR"
     PRICE_FIELD = "PRICE_FIELD"
@@ -162,8 +166,10 @@ class DeploymentSettings(BaseModel):
     max_daily_loss: float = Field(..., description="Max daily loss circuit breaker (positive number)")
     max_daily_profit: Optional[float] = None
     max_trades_per_day: int = Field(..., description="Overtrading limiter")
+    max_open_positions: int = Field(default=1, description="Max concurrent active positions across all sets")
     
     execution_style: ExecutionStyle = Field(default=ExecutionStyle.INTRADAY, description="INTRADAY auto-squares off; POSITIONAL holds overnight")
+    signal_timing: SignalTiming = Field(default=SignalTiming.ON_BAR_CLOSE, description="Signal timing: ON_BAR_CLOSE or PREVIOUS_BAR_CLOSE")
     order_type: OrderType = Field(default=OrderType.LIMIT_BUFFER)
     limit_buffer_pct: float = Field(0.005, description="e.g. 0.005 for 0.5% buffer")
     market_open_delay_minutes: int = Field(5, description="Delay from open to start trading")

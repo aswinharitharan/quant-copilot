@@ -15,8 +15,10 @@ import pandas as pd
 from src.schema.strategy import (
     StrategyDefinition,
     ExecutionStyle,
+    SignalTiming,
     InstrumentType,
     OrderAction,
+    TimeFrame,
     Leg,
 )
 from src.schema.backtest_models import Trade, BacktestResult
@@ -57,21 +59,24 @@ class Backtester:
 
         df_work = df.copy()
 
-        # Date range filtering if specified
+        # Parse start/end dates for the simulation window (preserving earlier bars for indicator warmup)
+        ts_start = None
+        ts_end = None
         if start_date:
-            df_work = df_work[df_work.index >= pd.to_datetime(start_date)]
+            ts_start = pd.to_datetime(start_date)
+            if df_work.index.tz is not None and ts_start.tz is None:
+                ts_start = ts_start.tz_localize(df_work.index.tz)
         if end_date:
-            df_work = df_work[df_work.index <= pd.to_datetime(end_date)]
-
-        if df_work.empty:
-            raise ValueError("DataFrame is empty after applying start/end date filters")
+            ts_end = pd.to_datetime(end_date)
+            if df_work.index.tz is not None and ts_end.tz is None:
+                ts_end = ts_end.tz_localize(df_work.index.tz)
 
         # Ensure DTE column is present if underlying has monthly expiries
         if "days_to_expiry" not in df_work.columns:
             cal = ExpiryCalendar()
             df_work = cal.add_dte_column(df_work)
 
-        # Pre-compute condition signals across all bars
+        # Pre-compute condition signals across all bars (with full warmup)
         entry_signals: Dict[int, pd.Series] = {}
         exit_signals: Dict[int, pd.Series] = {}
 
@@ -86,8 +91,18 @@ class Backtester:
         if self.strategy.universal_exit:
             universal_exit_series = ConditionEvaluator.evaluate_group(self.strategy.universal_exit, df_work)
 
-        # Simulation state
         deploy = self.strategy.deployment_settings
+
+        # If strategy requests PREVIOUS_BAR_CLOSE, signals evaluate on candle t-1 and take entry/exit on candle t
+        if deploy.signal_timing == SignalTiming.PREVIOUS_BAR_CLOSE:
+            for s_id in entry_signals:
+                entry_signals[s_id] = entry_signals[s_id].shift(1).fillna(False)
+            for s_id in exit_signals:
+                exit_signals[s_id] = exit_signals[s_id].shift(1).fillna(False)
+            if universal_exit_series is not None:
+                universal_exit_series = universal_exit_series.shift(1).fillna(False)
+
+        # Simulation state
         initial_capital = deploy.capital_allocated
         current_cash = initial_capital
 
@@ -102,7 +117,6 @@ class Backtester:
         today_realized_pnl = 0.0
 
         market_open_time = time(9, 15, 0)
-        # Market open delay
         delay_minutes = deploy.market_open_delay_minutes
         allowed_start_time = (datetime.combine(datetime.today(), market_open_time) + timedelta(minutes=delay_minutes)).time()
 
@@ -148,13 +162,23 @@ class Backtester:
             today_realized_pnl += pos.pnl_net
             closed_trades.append(pos)
 
+        is_daily = (self.strategy.timeframe == TimeFrame.D1)
+
         # -------------------------------------------------------------
         # MAIN BAR-BY-BAR LOOP
         # -------------------------------------------------------------
         for current_time, bar in df_work.iterrows():
+            # Skip warmup bars before start_date
+            if ts_start and current_time < ts_start:
+                continue
+            # Stop if past end_date
+            if ts_end and current_time > ts_end:
+                break
             bar_date = current_time.date()
             bar_time_of_day = current_time.time()
             close_price = float(bar["close"])
+            open_price = float(bar["open"])
+            signal_exec_price = open_price if deploy.signal_timing == SignalTiming.PREVIOUS_BAR_CLOSE else close_price
 
             # 1. Day transition reset
             if current_trading_day != bar_date:
@@ -206,12 +230,16 @@ class Backtester:
 
                     # Set exit condition check
                     if exit_signals.get(set_id) is not None and exit_signals[set_id].loc[current_time]:
-                        close_position(k, current_time, close_price, reason="SET_EXIT_CONDITION")
+                        close_position(k, current_time, signal_exec_price, reason="SET_EXIT_CONDITION")
 
             # 5. Check Entry Conditions
-            if not is_locked_for_day and bar_time_of_day >= allowed_start_time:
+            if not is_locked_for_day and (is_daily or bar_time_of_day >= allowed_start_time):
                 for s in self.strategy.sets:
                     if daily_trades_count >= deploy.max_trades_per_day:
+                        break
+
+                    # Enforce global maximum concurrent positions limit across all sets
+                    if len(open_positions) >= deploy.max_open_positions:
                         break
 
                     # Check if this set already has open positions
@@ -225,7 +253,7 @@ class Backtester:
                             entry_cost = self.cost_model.calculate(
                                 action=leg.action,
                                 instrument_type=leg.instrument_type,
-                                price=close_price,
+                                price=signal_exec_price,
                                 quantity=qty,
                                 is_intraday=is_intraday_mode,
                             )
@@ -238,7 +266,7 @@ class Backtester:
                                 instrument_type=leg.instrument_type,
                                 action=leg.action,
                                 entry_time=current_time,
-                                entry_price=close_price,
+                                entry_price=signal_exec_price,
                                 quantity=qty,
                                 costs=entry_cost,
                             )
@@ -285,8 +313,8 @@ class Backtester:
             strategy_name=self.strategy.name,
             underlying=self.strategy.underlying,
             timeframe=self.strategy.timeframe.value,
-            start_date=str(df_work.index[0]),
-            end_date=str(df_work.index[-1]),
+            start_date=str(equity_curve.index[0]) if not equity_curve.empty else str(df_work.index[0]),
+            end_date=str(equity_curve.index[-1]) if not equity_curve.empty else str(df_work.index[-1]),
             initial_capital=initial_capital,
             trades=closed_trades,
             equity_curve=equity_curve,
