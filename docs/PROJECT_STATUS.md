@@ -2,7 +2,7 @@
 
 > **Purpose**: Read this file at the start of any new chat session to instantly restore full project context with minimal token usage.  
 > **Last Updated**: 2026-11-05  
-> **Current Active Phase**: Phase 1 (Core Quant & Execution Engine) - Backtest & Broker Data Complete; Benchmark Validated (57/57 tests passing)  
+> **Current Active Phase**: Phase 1 (Core Quant & Execution Engine) - Step 2C Smart Cache Complete; 66/66 tests passing  
 
 ---
 
@@ -22,7 +22,7 @@
 | Phase | Milestone Name | Status | Next Milestone |
 | :--- | :--- | :--- | :--- |
 | **Phase 0** | Architecture, Scaffolding, Documentation & Basement | ✅ Complete | Ready for Phase 1 implementation |
-| **Phase 1** | Quant Engine, Backtester, Paper Broker & Risk Sentinel | 🔄 In Progress | Milestone 1.4: Paper Broker & Risk Sentinel (Step 2C) |
+| **Phase 1** | Quant Engine, Backtester, Paper Broker & Risk Sentinel | 🔄 In Progress | Milestone 1.4: Paper Broker & Risk Sentinel (Step 2D) |
 | **Phase 2** | Skills & MCP Modularization | ⏳ Pending | Expose Engine as MCP Server |
 | **Phase 3** | Web App Platform (Chat Copilot + Visual Dynamic Canvas) | ⏳ Pending | Full-stack Web UI Development |
 | **Phase 4** | Consumer Marketplace & Strategy Recommendation Engine | ⏳ Pending | Investor matching algorithm & catalog |
@@ -90,10 +90,16 @@ We execute Phase 1 in clear, self-contained chunks:
    - [`src/engine/metrics.py`](file:///Users/aswinkarthik.th/.gemini/antigravity-ide/scratch/quant-copilot/src/engine/metrics.py) (CAGR, Sharpe, Sortino, Calmar, Max Drawdown, Win Rate, Expectancy).
    - Benchmark Implementation & Validation: [`src/strategies/nestle_200_sma.py`](file:///Users/aswinkarthik.th/.gemini/antigravity-ide/scratch/quant-copilot/src/strategies/nestle_200_sma.py) & [`tests/test_benchmark_nestle.py`](file:///Users/aswinkarthik.th/.gemini/antigravity-ide/scratch/quant-copilot/tests/test_benchmark_nestle.py) (Full 57/57 total test suite passing).
    - Runners & Analyzers: [`scripts/run_nestle_angel_backtest.py`](file:///Users/aswinkarthik.th/.gemini/antigravity-ide/scratch/quant-copilot/scripts/run_nestle_angel_backtest.py), [`scripts/run_nestle_5yr_angel_backtest.py`](file:///Users/aswinkarthik.th/.gemini/antigravity-ide/scratch/quant-copilot/scripts/run_nestle_5yr_angel_backtest.py), [`scripts/add_backtest_to_excel.py`](file:///Users/aswinkarthik.th/.gemini/antigravity-ide/scratch/quant-copilot/scripts/add_backtest_to_excel.py) (exports year-wise metrics & 493-trade log to Excel).
-4. **Step 2C: Smart Incremental Master Cache & Extended Backtests** (🔄 NEXT IN NEW SESSION)
-   - Range-aware cache manager that automatically checks existing Parquet data on disk and only calls broker API for missing time deltas.
-   - Additional strategy backtests and trend filter enhancements.
-5. **Step 2D: Paper Broker & Risk Sentinel**
+4. **Step 2C: Smart Incremental Master Cache & Extended Backtests** (✅ COMPLETE)
+   - [`src/engine/smart_cache.py`](file:///Users/aswinkarthik.th/.gemini/antigravity-ide/scratch/quant-copilot/src/engine/smart_cache.py): Range-aware smart cache manager (`SmartCacheManager`).
+   - Lightning-fast (<2ms) time range inspection using PyArrow column projection without reading entire datasets.
+   - Intelligent delta interval calculation (left/prepend, right/append, disjoint) so only missing calendar dates are queried from the broker API.
+   - Clean single-file master Parquet format (`data/cache/{symbol}_{exchange}_{interval}.parquet`) with embedded schema/index metadata (zero `.meta.json` clutter).
+   - Atomic merge and write with cross-process file locking via standard library `fcntl.flock`.
+   - Runtime provider resolution (Angel One SmartAPI default, DhanHQ, YFinance, or custom instance).
+   - Automated cache pruning/retention policy (`prune_cache` by age and disk budget with master file protection).
+   - Tests: [`tests/test_smart_cache.py`](file:///Users/aswinkarthik.th/.gemini/antigravity-ide/scratch/quant-copilot/tests/test_smart_cache.py) (9/9 tests passing; 66/66 total suite passing).
+5. **Step 2D: Paper Broker & Risk Sentinel** (🔄 NEXT MILESTONE)
    - `src/brokers/paper_broker.py` & `src/risk/sentinel.py` (Virtual order execution, tick subscriber, Max Daily Loss kill-switch).
 
 

@@ -1,8 +1,8 @@
-# Lesson 2: Historical Data Feed & Parquet Caching
+# Lesson 2: Historical Data Feed & Smart Incremental Master Cache
 
-**Modules:** `src/engine/data_feed.py`, `src/engine/expiry_calendar.py`, `src/engine/providers/yfinance_provider.py`
+**Modules:** `src/engine/data_feed.py`, `src/engine/smart_cache.py`, `src/engine/expiry_calendar.py`, `src/engine/providers/angel_provider.py`
 
-In quantitative finance, the quality and speed of your backtest are entirely dictated by how you ingest, store, and process market data. In this lesson, we explore how QuantCopilot solves data feeding, local caching, and Indian exchange calendar mechanics.
+In quantitative finance, the quality and speed of your backtest are entirely dictated by how you ingest, store, and process market data. In this lesson, we explore how QuantCopilot solves market data feeding, local caching, range-aware incremental delta fetching, and Indian exchange calendar mechanics.
 
 ---
 
@@ -17,15 +17,44 @@ The Data Feed acts as the **fuel line** for the backtester:
 
 ---
 
-## 2. WHY an Abstract Base Class (`BaseDataProvider(ABC)`)?
+## 2. The Evolution to Smart Incremental Master Caching (`SmartCacheManager`)
+
+### The Problem with Static Date-Keyed Caching
+Originally, cache files were saved with exact date-window strings:
+`NESTLEIND_NSE_15m_2024-01-01_2024-06-30.parquet`
+
+If the user then requested `2024-01-01` to `2024-12-31`, a naive cache system treated this as a complete cache miss, re-downloading the entire year—wasting broker API rate limits and bandwidth.
+
+### The Solution: Range-Aware Incremental Fetching
+`SmartCacheManager` (`src/engine/smart_cache.py`) upgrades the storage to a **single canonical Master Parquet file** per instrument and timeframe:
+`data/cache/NESTLEIND_NSE_15m.parquet`
+
+#### How It Operates in Milliseconds:
+1. **Sub-2ms Time Range Inspection (PyArrow)**:
+   Instead of reading millions of rows into RAM, `pd.read_parquet(master_path, columns=[])` reads only the index metadata from the file footer. It retrieves the exact `(min_timestamp, max_timestamp)` in less than 2 milliseconds.
+2. **Delta Interval Calculation (`compute_missing_ranges`)**:
+   - **Full Cache Hit**: If requested range is inside cached range $\rightarrow$ **0 API calls**, instantaneous slice returned.
+   - **Left Delta (Prepend)**: If requesting older history $\rightarrow$ queries only the missing dates prior to cached start.
+   - **Right Delta (Append)**: If requesting newer history $\rightarrow$ queries only the missing dates after cached end.
+   - **Disjoint / Miss**: If no cache exists $\rightarrow$ queries the full window.
+3. **Atomic Merge & Concurrency Protection**:
+   When new delta candles arrive, they are concatenated with existing data, deduplicated by timestamp (`~combined.index.duplicated(keep="last")`), sorted, and atomically written via temporary file swap (`os.replace`) guarded by a cross-process lock (`fcntl.flock`).
+4. **Runtime Provider Selection**:
+   Defaults to Angel One SmartAPI for 10+ years of free historical depth, but seamlessly accepts DhanHQ, YFinance, or custom instances at runtime.
+5. **Cache Retention & Pruning (`prune_cache`)**:
+   Allows cleaning stale temporary slices by age (e.g., >30 days) or enforcing a maximum directory size budget while keeping master parquet files protected.
+
+---
+
+## 3. WHY an Abstract Base Class (`BaseDataProvider(ABC)`)?
 
 In algorithmic trading, data sources change constantly:
 * During offline prototyping, you want **free data** without API keys (`YFinanceProvider`).
 * In production, you want **official 1-minute broker tick data** (`DhanHQProvider`).
-* If you subscribe to institutional feeds, you want **tick-level archives** (`TrueDataProvider`).
+* For deep 10+ year historical intraday archives with automated TOTP 2FA, you use **Angel One SmartAPI** (`AngelOneProvider`).
 
 ### The Design Pattern: Dependency Inversion
-If we hardcoded Yahoo Finance inside our backtester, switching to DhanHQ would require rewriting the backtester!
+If we hardcoded Yahoo Finance inside our backtester, switching to DhanHQ or Angel One would require rewriting the backtester!
 
 By defining an **Abstract Base Class (`BaseDataProvider`)**, we create a rigid contract:
 ```python
@@ -35,19 +64,19 @@ class BaseDataProvider(ABC):
         pass
 ```
 
-`DataFeed` only knows about `BaseDataProvider`. To swap providers, you change **exactly 1 line of configuration**:
+`DataFeed` and `SmartCacheManager` only interact with `BaseDataProvider`. To swap providers, you change **exactly 1 line of configuration**:
 ```python
-# Development mode:
-feed = DataFeed(provider=YFinanceProvider())
+# Default Angel One SmartAPI (10+ year free history):
+cache = SmartCacheManager(default_provider="angel")
 
-# Live production mode:
-feed = DataFeed(provider=DhanHQProvider(client_id="...", token="..."))
+# Or switch to DhanHQ or YFinance at runtime:
+df = cache.get_candles("NESTLEIND", "NSE", "15m", "2024-01-01", "2024-12-31", provider="dhan")
 ```
-The caching, timeframe resampling, and backtesting math never change by a single line of code.
+The caching, deduplication, timeframe resampling, and backtesting math never change by a single line of code.
 
 ---
 
-## 3. WHY Apache Parquet instead of Plain CSV?
+## 4. WHY Apache Parquet instead of Plain CSV?
 
 In high-frequency and quant backtesting, storing 1-minute intraday data in CSV is an anti-pattern:
 
@@ -101,30 +130,42 @@ Our benchmark strategy states:
 
 ---
 
-## 6. Summary of Architectural Flow
+## 6. Summary of Architectural Flow (Smart Incremental Cache)
 
 ```
-[Strategy Request: NESTLEIND 15m]
-            │
-            ▼
-    ┌───────────────┐
-    │   DataFeed    │
-    └───────┬───────┘
-            │
-      Cache Hit?
-     ├── YES ──> [pd.read_parquet (~10ms)] ──┐
-     │                                       │
-     └── NO  ──> [BaseDataProvider Fetch]    │
-                       │                     │
-                 [Save .parquet]             │
-                       │                     │
-                       └─────────────────────┤
-                                             ▼
-                                  [Resample to 15m]
-                                             │
-                                             ▼
-                                  [ExpiryCalendar (DTE)]
-                                             │
-                                             ▼
-                                  [Ready for Backtest!]
+[Strategy Request: NESTLEIND 15m (start_date to end_date)]
+                        │
+                        ▼
+             ┌─────────────────────┐
+             │  SmartCacheManager  │
+             └──────────┬──────────┘
+                        │
+      Inspect Master Parquet Index (<2ms)
+      Check (min_time, max_time)
+                        │
+                        ▼
+            Missing Deltas Needed?
+           ├── NO  (100% Cache Hit) ─────────────────────────┐
+           │                                                 │
+           └── YES (Left / Right / Disjoint Span)            │
+                        │                                    │
+                        ▼                                    │
+             [Query Broker API for Delta]                    │
+                        │                                    │
+                        ▼                                    │
+             [Merge, Deduplicate & Save]                     │
+             (Lock-Protected Atomic Parquet)                 │
+                        │                                    │
+                        └────────────────────────────────────┤
+                                                             ▼
+                                                [Slice Exactly to Window]
+                                                             │
+                                                             ▼
+                                                [Optional Resampling (e.g. 1h)]
+                                                             │
+                                                             ▼
+                                                [ExpiryCalendar (DTE)]
+                                                             │
+                                                             ▼
+                                                [Ready for Backtest!]
 ```

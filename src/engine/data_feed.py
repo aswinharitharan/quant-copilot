@@ -182,3 +182,8 @@ class DataFeed:
         resampled = resampled.dropna(subset=["open"])
         resampled.index.name = "datetime"
         return resampled
+
+
+# Forward import for convenient access from data_feed
+from src.engine.smart_cache import SmartCacheManager
+
