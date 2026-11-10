@@ -47,6 +47,24 @@ TACTIC 1: MOMENTUM BREAKOUT / RETEST                  TACTIC 2: EXHAUSTION CLIMA
 
 ---
 
-## 4. Implementation Schedule
+## 4. Key Architectural Lessons from 52-Week Low Strategy
+
+> [!IMPORTANT]
+> **Key Architectural Pattern to Reuse from 52-Week Low Strategy**:
+> During the implementation of the 52-Week Low Strategy, two fundamental lessons were learned that **must** be applied directly to the 52-Week High Strategy:
+>
+> 1. **Local Institutional Discovery Base (`config/nifty500.csv` & `config/nifty200.csv`)**:
+>    - **Never rely solely on external daily web scrapers (like NSE "top gainers")**.
+>    - Strong compounders frequently break out into 52-week highs steadily (+1.5% to +3.0%) without appearing in the volatile "Top 20 Percentage Gainers" list.
+>    - The 52W High scanner **must scan the curated local Nifty 500 universe** directly using `SmartCacheManager` so zero quality leaders are missed.
+>
+> 2. **Multi-Session Breakout & Retest Lookback (T-5 Day Window)**:
+>    - Just like capitulation, **breakouts are rarely isolated to a single day**.
+>    - A stock may have its $5\times$ volume breakout on Day 1, and on Day 3–5 it may test the breakout level on lower volume (pullback/retest).
+>    - The technical engine must evaluate a rolling **5-day lookback window** for maximum volume expansion and breakout level retests, rather than evaluating only the current day's single bar in isolation.
+
+---
+
+## 5. Implementation Schedule
 Implementation will follow the completion of the 52-Week Low Capitulation Strategy (Phases B, C, D).
 

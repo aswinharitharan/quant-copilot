@@ -149,6 +149,35 @@ def test_scan_candidate_success_radar():
     assert signal.insider_activity.is_material_promoter_buy is True
 
 
+def test_scan_candidate_secondary_test_lookback():
+    """Verify Wyckoff secondary test: 4x volume spike was 3 days ago, today re-tests low on normal volume."""
+    df = generate_synthetic_candles(n_bars=260, anomaly_on_last_bar=False)
+    # Put 4.5x volume spike on bar -4 (3 sessions ago)
+    mean_vol = np.mean(df["volume"].iloc[-25:-5])
+    df.iloc[-4, df.columns.get_loc("volume")] = int(mean_vol * 4.5)
+    # Lowest price was on bar -4
+    lowest_px = 100.0
+    df.iloc[-4, df.columns.get_loc("low")] = lowest_px
+    df.iloc[-4, df.columns.get_loc("close")] = lowest_px + 2.0
+    
+    # Today (bar -1) has normal volume (1.5x) but re-tests the low (100.5, within 1% of 100.0)
+    df.iloc[-1, df.columns.get_loc("low")] = lowest_px + 0.5
+    df.iloc[-1, df.columns.get_loc("close")] = lowest_px + 2.0
+    df.iloc[-1, df.columns.get_loc("volume")] = int(mean_vol * 1.5)
+
+    scanner = LowCapitulationScanner(
+        screener_client=MockScreenerClient(passed=True),
+        insider_feed=MockInsiderFeed(has_material_buy=False),
+    )
+    signal = scanner.scan_candidate(symbol="AIAENG", df=df)
+
+    assert signal is not None
+    assert signal.symbol == "AIAENG"
+    assert signal.volume_ratio >= 4.0  # Captured the primary climax from 3 sessions ago
+    assert signal.support_sl == lowest_px  # Anchored to the true capitulation low
+
+
+
 def test_scan_candidate_rejected_by_low_volume():
     # Only 1.5x volume (fails >= 3.0x threshold)
     df = generate_synthetic_candles(n_bars=260, anomaly_on_last_bar=True, volume_multiplier=1.5)

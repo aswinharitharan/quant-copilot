@@ -48,13 +48,21 @@ class ScannerService:
     ):
         self.cache_dir = Path(cache_dir)
         self.data_dir = Path(data_dir)
-        self.cache_manager = cache_manager
+        if cache_manager is None:
+            try:
+                from src.engine.smart_cache import SmartCacheManager
+                self.cache_manager = SmartCacheManager(cache_dir=cache_dir, default_provider="yfinance")
+            except Exception as e:
+                logger.warning(f"Could not initialize default SmartCacheManager: {e}")
+                self.cache_manager = None
+        else:
+            self.cache_manager = cache_manager
 
         self.screener = screener_client or ScreenerClient(cache_dir=cache_dir)
         self.insider = insider_feed or InsiderFeed(cache_dir=cache_dir)
         self.tracker = PortfolioTracker(data_dir=data_dir)
         self.scanner = LowCapitulationScanner(
-            cache_manager=cache_manager,
+            cache_manager=self.cache_manager,
             screener_client=self.screener,
             insider_feed=self.insider,
             cache_dir=cache_dir,

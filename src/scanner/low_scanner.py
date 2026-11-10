@@ -57,10 +57,35 @@ class LowCapitulationScanner:
     # STEP 1: BROAD 52W-LOW DISCOVERY
     # -------------------------------------------------------------------------
 
+    def load_quality_universe_symbols(self) -> List[str]:
+        """Load symbols from local quality universes (Nifty 500 / Nifty 200).
+        
+        Ensures high-conviction institutional compounders (e.g. AIAENG, NESTLEIND)
+        are never missed even if external scraper endpoints fail or omit them.
+        """
+        symbols: List[str] = []
+        for cfg_name in ["nifty500.csv", "nifty200.csv"]:
+            cfg_path = Path("config") / cfg_name
+            if cfg_path.exists():
+                try:
+                    import csv
+                    with open(cfg_path, "r", encoding="utf-8") as f:
+                        reader = csv.DictReader(f)
+                        for row in reader:
+                            sym = (row.get("Symbol") or "").strip().upper()
+                            if sym and sym not in symbols:
+                                symbols.append(sym)
+                except Exception as e:
+                    logger.warning(f"Error reading {cfg_path}: {e}")
+        return symbols
+
     def fetch_nse_52w_low_symbols(self, force_refresh: bool = False) -> List[str]:
         """Fetch list of symbols currently at or near 52-week low directly from NSE.
         
         Cached locally for 2 hours to avoid hammering NSE endpoints.
+        Combines NSE live API output with local quality universe (Nifty 500)
+        to prevent missing institutional stocks that drift into 52W lows without
+        being top daily percentage losers.
         """
         cache_file = self.cache_dir / "nse_52w_low_symbols.json"
         now = time.time()
@@ -93,17 +118,49 @@ class LowCapitulationScanner:
             resp = s.get(self.NSE_52W_LOW_URL, timeout=10)
             if resp.status_code == 200:
                 data = resp.json()
-                raw_list = data.get("data", []) or data.get("NIFTY", {}).get("data", [])
+                raw_list = []
+                if isinstance(data, dict):
+                    if isinstance(data.get("data"), list):
+                        raw_list = data["data"]
+                    elif isinstance(data.get("NIFTY"), dict) and isinstance(data["NIFTY"].get("data"), list):
+                        raw_list = data["NIFTY"]["data"]
+                elif isinstance(data, list):
+                    raw_list = data
+
                 for item in raw_list:
-                    sym = item.get("symbol") or item.get("symbolName")
-                    if sym and sym not in symbols:
-                        symbols.append(sym.strip().upper())
+                    if isinstance(item, dict):
+                        sym = item.get("symbol") or item.get("symbolName")
+                        if sym and sym not in symbols:
+                            symbols.append(sym.strip().upper())
             else:
                 logger.warning(f"NSE 52W Low API status: {resp.status_code}")
+
+            # If empty, fallback to live analysis losers near 52-week low
+            if not symbols:
+                r_loosers = s.get("https://www.nseindia.com/api/live-analysis-variations?index=loosers", timeout=10)
+                if r_loosers.status_code == 200:
+                    d_loosers = r_loosers.json()
+                    if isinstance(d_loosers, dict):
+                        for sec in ["allSec", "FOSec", "NIFTY", "NIFTYNEXT50"]:
+                            sec_data = d_loosers.get(sec, {})
+                            if isinstance(sec_data, dict):
+                                for it in sec_data.get("data", []):
+                                    if isinstance(it, dict):
+                                        sym = it.get("symbol")
+                                        near_wkl = it.get("nearWKL", -999)
+                                        # Within 15% of 52W low
+                                        if sym and near_wkl > -15.0 and sym not in symbols:
+                                            symbols.append(sym.strip().upper())
         except Exception as e:
             logger.warning(f"NSE 52W Low API fetch failed: {e}")
 
-        # Fallback to cached data if exists
+        # Fallback / Supplement with local Quality Universe (Nifty 500)
+        quality_symbols = self.load_quality_universe_symbols()
+        for q_sym in quality_symbols:
+            if q_sym not in symbols:
+                symbols.append(q_sym)
+
+        # Fallback to cached data if exists and still empty
         if not symbols and cache_file.exists():
             with open(cache_file, "r", encoding="utf-8") as f:
                 return json.load(f)
@@ -136,9 +193,16 @@ class LowCapitulationScanner:
         low_52w = d["low"].rolling(window=roll_window, min_periods=20).min().iloc[-1]
 
         # 20-day Volume SMA (calculated on PRIOR 20 trading sessions to prevent today's anomaly from skewing the baseline)
-        vol_sma20 = d["volume"].shift(1).rolling(window=20, min_periods=5).mean().iloc[-1]
+        vol_sma20_series = d["volume"].shift(1).rolling(window=20, min_periods=5).mean()
+        vol_sma20 = vol_sma20_series.iloc[-1]
         vol_today = float(d["volume"].iloc[-1])
         vol_ratio = round(vol_today / vol_sma20, 2) if vol_sma20 > 0 else 1.0
+
+        # Rolling 5-day max volume anomaly (to detect multi-day capitulation / secondary tests)
+        vol_ratios_series = (d["volume"] / vol_sma20_series.replace(0, float("nan"))).fillna(1.0)
+        recent_window = min(5, len(d))
+        max_vol_ratio_5d = round(float(vol_ratios_series.iloc[-recent_window:].max()), 2)
+        min_low_5d = float(d["low"].iloc[-recent_window:].min())
 
         # EMAs (Wilder/Standard exponential)
         ema5 = float(d["close"].ewm(span=5, adjust=False).mean().iloc[-1])
@@ -152,6 +216,8 @@ class LowCapitulationScanner:
             "vol_sma20": float(vol_sma20),
             "today_volume": int(vol_today),
             "volume_ratio": float(vol_ratio),
+            "max_vol_ratio_5d": float(max_vol_ratio_5d),
+            "min_low_5d": float(min_low_5d),
             "today_open": float(last_bar["open"]),
             "today_high": float(last_bar["high"]),
             "today_low": float(last_bar["low"]),
@@ -185,25 +251,7 @@ class LowCapitulationScanner:
         """
         clean_sym = symbol.upper().replace(".NS", "").replace(".BO", "")
 
-        # 1. Fundamental Audit First (Funnel Step 2)
-        audit = None
-        if not skip_fundamental_audit:
-            try:
-                audit = self.screener.audit_company(clean_sym)
-                if not audit.passed_audit:
-                    logger.info(f"{clean_sym} rejected by fundamental audit: {audit.failure_reasons}")
-                    return None
-            except Exception as e:
-                logger.warning(f"Could not audit {clean_sym}: {e}")
-                return None
-        else:
-            audit = FundamentalAudit(
-                symbol=clean_sym,
-                audit_date=as_of_date or datetime.now(timezone.utc).strftime("%Y-%m-%d"),
-                passed_audit=True,
-            )
-
-        # 2. Targeted Historical Candles (Funnel Step 3)
+        # 1. Targeted Historical Candles
         if df is None:
             if self.cache_manager is None:
                 raise ValueError("No DataFrame provided and no cache_manager configured.")
@@ -231,21 +279,48 @@ class LowCapitulationScanner:
             if df.empty or len(df) < 20:
                 return None
 
-        # 3. Technical Metrics
+        # 2. Technical Metrics
         tech = self.calculate_technical_levels(df)
 
-        # 4. Technical Rule 1: Fresh 52-Week Low (within 0.5% tolerance)
+        # 3. Technical Rule 1: Fresh 52-Week Low (within 0.5% tolerance)
         today_low = tech["today_low"]
         low_52w = tech["low_52w"]
-        is_52w_low = today_low <= (low_52w * 1.005)
+        min_low_5d = tech.get("min_low_5d", today_low)
+        # Holds if today's low is at 52W low, or if 52W low was printed in last 5 days and today is testing within 1.5%
+        is_52w_low = (today_low <= (low_52w * 1.005)) or (min_low_5d <= (low_52w * 1.005) and today_low <= (min_low_5d * 1.015))
 
         if not is_52w_low:
             return None
 
-        # 5. Technical Rule 2: Institutional Volume Anomaly (>= 3.0x 20-day SMA)
+        # 4. Technical Rule 2: Institutional Volume Anomaly (>= 3.0x 20-day SMA)
+        # Accepts either today's anomaly OR a primary climax (>= 3.0x) within the last 5 trading days
         vol_ratio = tech["volume_ratio"]
-        if vol_ratio < 3.0:
+        max_vol_ratio_5d = tech.get("max_vol_ratio_5d", vol_ratio)
+
+        if vol_ratio < 3.0 and max_vol_ratio_5d < 3.0:
             return None
+
+        # Effective volume anomaly for display
+        effective_vol_ratio = max(vol_ratio, max_vol_ratio_5d)
+        effective_low = min(today_low, min_low_5d)
+
+        # 5. Fundamental Audit (Funnel Step 2 - only executed if technical conditions pass)
+        audit = None
+        if not skip_fundamental_audit:
+            try:
+                audit = self.screener.audit_company(clean_sym)
+                if not audit.passed_audit:
+                    logger.info(f"{clean_sym} rejected by fundamental audit: {audit.failure_reasons}")
+                    return None
+            except Exception as e:
+                logger.warning(f"Could not audit {clean_sym}: {e}")
+                return None
+        else:
+            audit = FundamentalAudit(
+                symbol=clean_sym,
+                audit_date=as_of_date or datetime.now(timezone.utc).strftime("%Y-%m-%d"),
+                passed_audit=True,
+            )
 
         # 6. Check for Insider Buying kicker
         insider_trade = self.insider.get_symbol_insider_activity(clean_sym)
@@ -256,13 +331,13 @@ class LowCapitulationScanner:
         return CapitulationSignal(
             symbol=clean_sym,
             capitulation_date=candle_date,
-            low_price=today_low,
+            low_price=effective_low,
             high_price=tech["today_high"],
             close_price=tech["today_close"],
             today_volume=tech["today_volume"],
             avg_volume_20d=tech["vol_sma20"],
-            volume_ratio=vol_ratio,
-            support_sl=today_low,            # Soft Stop-Loss baseline
+            volume_ratio=effective_vol_ratio,
+            support_sl=effective_low,        # Soft Stop-Loss baseline
             target_1_20ema=tech["ema20"],    # Target 1
             target_2_50ema=tech["ema50"],    # Target 2
             audit=audit,
