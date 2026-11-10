@@ -321,3 +321,4 @@ class ScannerService:
             sell_date=sell_date,
             notes=notes,
         )
+

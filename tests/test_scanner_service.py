@@ -203,3 +203,4 @@ def test_buy_and_sell_proxies(temp_service: ScannerService):
     assert archived.net_return_pct == 10.0
     assert len(temp_service.tracker.get_portfolio()) == 0
     assert len(temp_service.tracker.get_trade_ledger()) == 1
+
