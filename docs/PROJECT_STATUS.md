@@ -2,7 +2,7 @@
 
 > **Purpose**: Read this file at the start of any new chat session to instantly restore full project context with minimal token usage.  
 > **Last Updated**: 2026-11-10  
-> **Current Active Phase**: Phase 1 (Core Quant & Execution Engine) + 52-Week Low Strategy Phase C Complete; 86/86 tests passing  
+> **Current Active Phase**: Phase 1 (Core Quant & Execution Engine) + 52-Week Low Strategy Complete (Phases A–D); 91/91 tests passing  
 
 ---
 
@@ -121,7 +121,10 @@ We execute Phase 1 in clear, self-contained chunks:
   - **Phase C: Watchlist, Portfolio Tracker, Soft Stop & Target Sentinel** (✅ COMPLETE)
     - [`src/scanner/tracker.py`](file:///Users/aswinkarthik.th/.gemini/antigravity-ide/scratch/quant-copilot/src/scanner/tracker.py): `PortfolioTracker` managing 3-tier JSON storage (`data/watchlist_52_low.json`, `data/portfolio_52_low.json`, `data/trade_history_52_low.json`), contextual event audit notes (`history_notes`), cascading capitulation resets, partial scaling (50% book at T1, 50% at T2), auto-archiving, and daily status badges (`SAFE`, `RADAR_ALERT`, `DECISION_REQD`, `TARGET_1_HIT`, `TARGET_2_HIT`).
     - Tests: [`tests/test_tracker.py`](file:///Users/aswinkarthik.th/.gemini/antigravity-ide/scratch/quant-copilot/tests/test_tracker.py) (5/5 tests passing; 86/86 total project suite passing).
-  - **Phase D: Conversational Trigger ('Whats today for 52') & CLI Runner** (⏳ NEXT UP)
+  - **Phase D: Conversational Trigger ('Whats today for 52') & CLI Runner** (✅ COMPLETE)
+    - [`src/scanner/service.py`](file:///Users/aswinkarthik.th/.gemini/antigravity-ide/scratch/quant-copilot/src/scanner/service.py): `ScannerService` unified facade tying together technical scanner, fundamental auditor, insider feed, portfolio tracker, fast lightweight queries (`portfolio`, `watchlist`), and Markdown executive briefing formatting.
+    - [`scripts/run_52_scanner.py`](file:///Users/aswinkarthik.th/.gemini/antigravity-ide/scratch/quant-copilot/scripts/run_52_scanner.py): Modular CLI runner supporting `daily`, `portfolio`, `watchlist`, `audit`, `buy`, and `sell` subcommands.
+    - Tests: [`tests/test_scanner_service.py`](file:///Users/aswinkarthik.th/.gemini/antigravity-ide/scratch/quant-copilot/tests/test_scanner_service.py) (5/5 tests passing; 91/91 total project suite passing).
 
 ### 2. 52-Week High Dual-Mode Strategy ([`docs/STRATEGY_52_WEEK_HIGH.md`](file:///Users/aswinkarthik.th/.gemini/antigravity-ide/scratch/quant-copilot/docs/STRATEGY_52_WEEK_HIGH.md))
 - **Concept**: Dual-mode engine distinguishing clean continuation breakouts (close at high on base) from buying climaxes / distribution tops (long upper rejection wick on parabolic run for shorting or full exit).

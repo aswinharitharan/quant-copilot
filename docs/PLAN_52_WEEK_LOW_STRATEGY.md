@@ -1,8 +1,8 @@
 # Master Implementation Plan: 52-Week Low Capitulation Strategy & Scanner System
 
 > **Repository File**: `docs/PLAN_52_WEEK_LOW_STRATEGY.md`  
-> **Status**: **Phase C Complete ✅ | Ready for Phase D ⏳**  
-> **Current Test Suite**: 86/86 tests passing (`.venv/bin/pytest tests/`)  
+> **Status**: **All Phases (A, B, C, D) Complete ✅ | Strategy Engine Production-Ready**  
+> **Current Test Suite**: 91/91 tests passing (`.venv/bin/pytest tests/`)  
 > **Master Context Registry**: [`docs/PROJECT_STATUS.md`](file:///Users/aswinkarthik.th/.gemini/antigravity-ide/scratch/quant-copilot/docs/PROJECT_STATUS.md)  
 > **Living Strategy Spec**: [`docs/STRATEGY_52_WEEK_LOW.md`](file:///Users/aswinkarthik.th/.gemini/antigravity-ide/scratch/quant-copilot/docs/STRATEGY_52_WEEK_LOW.md)
 
@@ -92,17 +92,10 @@ flowchart TD
 
 ---
 
-### Phase D: Conversational Trigger ('Whats today for 52') & CLI Runner (⏳ NEXT UP)
-- **Files**: `scripts/run_52_scanner.py`, MCP wrapper.
-- **Responsibilities**:
-  1. CLI runner to execute scans or view active portfolio status.
-  2. Conversational trigger: when user types `"Whats today for 52"`, produces the structured daily dashboard briefing:
-     - 🎯 **New 52-Week Low Capitulations (Radar candidates for today)**
-     - 🟢 **Watchlist Buy Triggers (Stocks you are watching that triggered BUY today!)**
-     - 🛡️ **Bought Portfolio Sentinel (Status of bought stocks: Safe / Alert / Target 1 / Target 2)**
-     - 🏢 **Promoter / Insider Buying Alerts**
-  3. Follow-up Q&A capability for individual stocks.
-  4. Updates to `docs/STRATEGY_52_WEEK_LOW.md` and `docs/PROJECT_STATUS.md`.
+### Phase D: Conversational Trigger ('Whats today for 52') & CLI Runner (✅ COMPLETE)
+- [`src/scanner/service.py`](file:///Users/aswinkarthik.th/.gemini/antigravity-ide/scratch/quant-copilot/src/scanner/service.py): `ScannerService` unified facade tying together technical scanner, fundamental auditor, insider feed, portfolio tracker, fast lightweight queries (`portfolio`, `watchlist`), and Markdown executive briefing formatting.
+- [`scripts/run_52_scanner.py`](file:///Users/aswinkarthik.th/.gemini/antigravity-ide/scratch/quant-copilot/scripts/run_52_scanner.py): Modular CLI runner supporting `daily`, `portfolio`, `watchlist`, `audit`, `buy`, and `sell` subcommands.
+- Tests: [`tests/test_scanner_service.py`](file:///Users/aswinkarthik.th/.gemini/antigravity-ide/scratch/quant-copilot/tests/test_scanner_service.py) (5/5 tests passing; 91/91 total project suite passing).
 
 ---
 

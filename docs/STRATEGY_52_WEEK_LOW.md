@@ -1,6 +1,6 @@
 # 52-Week Low Institutional Capitulation Strategy
 
-> **Status**: In Progress — **Phase C Complete** (86/86 tests passing)  
+> **Status**: Production-Ready — **All Phases (A, B, C, D) Complete** (91/91 tests passing)  
 > **Target Market**: Indian Equities (NSE/BSE)  
 > **Strategy Type**: Institutional Mean-Reversion / Panic Absorption  
 > **Authoring Lead**: QuantCopilot AI  
@@ -84,5 +84,5 @@ Instead of hard broker stop orders vulnerable to intraday wick-hunting, active h
 | **Phase A** | **Architecture, Data Contracts & Auditors** | ✅ **COMPLETE** | [`src/scanner/models.py`](file:///Users/aswinkarthik.th/.gemini/antigravity-ide/scratch/quant-copilot/src/scanner/models.py), [`src/scanner/screener_client.py`](file:///Users/aswinkarthik.th/.gemini/antigravity-ide/scratch/quant-copilot/src/scanner/screener_client.py), [`src/scanner/insider_feed.py`](file:///Users/aswinkarthik.th/.gemini/antigravity-ide/scratch/quant-copilot/src/scanner/insider_feed.py), Unit tests (7/7 passing). |
 | **Phase B** | **Technical Engine & Stage 2 Confirmation** | ✅ **COMPLETE** | [`src/scanner/low_scanner.py`](file:///Users/aswinkarthik.th/.gemini/antigravity-ide/scratch/quant-copilot/src/scanner/low_scanner.py): 3-step funnel, volume anomalies, automated levels, and Stage 2 confirmation. Unit tests (8/8 passing). |
 | **Phase C** | **Watchlist, Portfolio Tracker & Sentinel** | ✅ **COMPLETE** | [`src/scanner/tracker.py`](file:///Users/aswinkarthik.th/.gemini/antigravity-ide/scratch/quant-copilot/src/scanner/tracker.py): 3-tier JSON management, contextual notes (`history_notes`), cascading resets, partial sell scaling, soft stop & target alerts. Unit tests (5/5 passing). |
-| **Phase D** | **Conversational Trigger & CLI Dashboard** | ⏳ **NEXT UP** | `"Whats today for 52"` trigger, `scripts/run_52_scanner.py`, MCP tool exposure. |
+| **Phase D** | **Conversational Trigger & CLI Dashboard** | ✅ **COMPLETE** | [`src/scanner/service.py`](file:///Users/aswinkarthik.th/.gemini/antigravity-ide/scratch/quant-copilot/src/scanner/service.py), [`scripts/run_52_scanner.py`](file:///Users/aswinkarthik.th/.gemini/antigravity-ide/scratch/quant-copilot/scripts/run_52_scanner.py): `"Whats today for 52"` briefing, CLI runner, fast modular queries (`daily`, `portfolio`, `watchlist`, `audit`, `buy`, `sell`). Unit tests (5/5 passing). |
 

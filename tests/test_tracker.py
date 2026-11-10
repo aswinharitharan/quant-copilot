@@ -222,3 +222,4 @@ def test_partial_scaling_and_full_exit_archiving(temp_tracker: PortfolioTracker)
     assert closed.holding_duration_days == 14
     assert len(closed.sells) == 2
     assert len(closed.history_notes) >= 3
+
