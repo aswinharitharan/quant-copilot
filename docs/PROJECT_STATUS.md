@@ -1,8 +1,8 @@
 # QuantCopilot Living Status & Context Registry
 
 > **Purpose**: Read this file at the start of any new chat session to instantly restore full project context with minimal token usage.  
-> **Last Updated**: 2026-11-05  
-> **Current Active Phase**: Phase 1 (Core Quant & Execution Engine) - Step 2C Smart Cache Complete; 66/66 tests passing  
+> **Last Updated**: 2026-11-10  
+> **Current Active Phase**: Phase 1 (Core Quant & Execution Engine) + 52-Week Low Strategy Phase A Complete; 73/73 tests passing  
 
 ---
 
@@ -13,7 +13,7 @@
   - **Angel One (SmartAPI)**: 100% Free broker-grade historical data (10+ years depth, 15m/1m OHLCV, automated 2FA TOTP login via `pyotp`). Primary market data feed.
   - **Dhan (DhanHQ)**: Trading API integration (execution and account management).
   - **Local PaperBroker**: Virtual low-latency execution engine for forward testing.
-- **Architecture**: Conversational AI Copilot -> Declarative Strategy DSL -> Deterministic Backtester -> Deployment Handshake -> Risk Sentinel -> Broker Adapter -> MCP Servers -> Dual-Pane Web UI.
+- **Architecture**: Conversational AI Copilot -> Declarative Strategy DSL -> Deterministic Backtester -> Deployment Handshake -> Risk Sentinel -> Broker Adapter -> Scanner & Sentinel Services -> MCP Servers -> Dual-Pane Web UI.
 
 ---
 
@@ -101,5 +101,26 @@ We execute Phase 1 in clear, self-contained chunks:
    - Tests: [`tests/test_smart_cache.py`](file:///Users/aswinkarthik.th/.gemini/antigravity-ide/scratch/quant-copilot/tests/test_smart_cache.py) (9/9 tests passing; 66/66 total suite passing).
 5. **Step 2D: Paper Broker & Risk Sentinel** (🔄 NEXT MILESTONE)
    - `src/brokers/paper_broker.py` & `src/risk/sentinel.py` (Virtual order execution, tick subscriber, Max Daily Loss kill-switch).
+
+---
+
+## 🏹 Institutional Strategies Registry
+
+### 1. 52-Week Low Capitulation Strategy ([`docs/STRATEGY_52_WEEK_LOW.md`](file:///Users/aswinkarthik.th/.gemini/antigravity-ide/scratch/quant-copilot/docs/STRATEGY_52_WEEK_LOW.md))
+- **Concept**: Detects panic selling absorbed by institutions at 52-week lows on abnormal volume ($3\times$ to $20\times$ 20-day SMA volume), backed by Screener.in solvency screening and SEBI PIT promoter buying.
+- **Interactive Lifecycle**: Radar Discovery $\to$ User Watchlist (Tier 1) $\to$ Stage 2 Buy Confirmation $\to$ Active Portfolio Tracking (Tier 2 with Soft Stop-Loss & Target 1/2) $\to$ Permanent Closed Trade Ledger (Tier 3).
+- **Progress Status**:
+  - **Phase A: Architecture, Data Contracts & Fundamental / Insider Engines** (✅ COMPLETE)
+    - [`src/scanner/models.py`](file:///Users/aswinkarthik.th/.gemini/antigravity-ide/scratch/quant-copilot/src/scanner/models.py): Pydantic data models for audit, insider trades, signals, watchlist, portfolio, and trade ledger.
+    - [`src/scanner/screener_client.py`](file:///Users/aswinkarthik.th/.gemini/antigravity-ide/scratch/quant-copilot/src/scanner/screener_client.py): Screener.in scraper enforcing 5 Golden Rules (0% pledge, D/E < 0.6, Int Coverage > 3.5, CFO > 0, ROCE >= 12%).
+    - [`src/scanner/insider_feed.py`](file:///Users/aswinkarthik.th/.gemini/antigravity-ide/scratch/quant-copilot/src/scanner/insider_feed.py): NSE SEBI PIT parser filtering material promoter open-market purchases ($\ge$ ₹1 Cr).
+    - Tests: [`tests/test_screener_client.py`](file:///Users/aswinkarthik.th/.gemini/antigravity-ide/scratch/quant-copilot/tests/test_screener_client.py) & [`tests/test_insider_feed.py`](file:///Users/aswinkarthik.th/.gemini/antigravity-ide/scratch/quant-copilot/tests/test_insider_feed.py) (7/7 tests passing; 73/73 total project suite passing).
+  - **Phase B: Technical Engine & Two-Stage State Machine** (⏳ NEXT UP)
+  - **Phase C: Watchlist, Portfolio Tracker, Soft Stop & Target Sentinel** (⏳ Pending)
+  - **Phase D: Conversational Trigger ('Whats today for 52') & CLI Runner** (⏳ Pending)
+
+### 2. 52-Week High Dual-Mode Strategy ([`docs/STRATEGY_52_WEEK_HIGH.md`](file:///Users/aswinkarthik.th/.gemini/antigravity-ide/scratch/quant-copilot/docs/STRATEGY_52_WEEK_HIGH.md))
+- **Concept**: Dual-mode engine distinguishing clean continuation breakouts (close at high on base) from buying climaxes / distribution tops (long upper rejection wick on parabolic run for shorting or full exit).
+- **Progress Status**: ⏳ Roadmapped (Scheduled after completion of 52-Week Low strategy).
 
 
