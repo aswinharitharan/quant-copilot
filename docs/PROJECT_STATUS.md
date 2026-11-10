@@ -2,7 +2,7 @@
 
 > **Purpose**: Read this file at the start of any new chat session to instantly restore full project context with minimal token usage.  
 > **Last Updated**: 2026-11-10  
-> **Current Active Phase**: Phase 1 (Core Quant & Execution Engine) + 52-Week Low Strategy Phase A Complete; 73/73 tests passing  
+> **Current Active Phase**: Phase 1 (Core Quant & Execution Engine) + 52-Week Low Strategy Phase B Complete; 81/81 tests passing  
 
 ---
 
@@ -115,8 +115,10 @@ We execute Phase 1 in clear, self-contained chunks:
     - [`src/scanner/screener_client.py`](file:///Users/aswinkarthik.th/.gemini/antigravity-ide/scratch/quant-copilot/src/scanner/screener_client.py): Screener.in scraper enforcing 5 Golden Rules (0% pledge, D/E < 0.6, Int Coverage > 3.5, CFO > 0, ROCE >= 12%).
     - [`src/scanner/insider_feed.py`](file:///Users/aswinkarthik.th/.gemini/antigravity-ide/scratch/quant-copilot/src/scanner/insider_feed.py): NSE SEBI PIT parser filtering material promoter open-market purchases ($\ge$ ₹1 Cr).
     - Tests: [`tests/test_screener_client.py`](file:///Users/aswinkarthik.th/.gemini/antigravity-ide/scratch/quant-copilot/tests/test_screener_client.py) & [`tests/test_insider_feed.py`](file:///Users/aswinkarthik.th/.gemini/antigravity-ide/scratch/quant-copilot/tests/test_insider_feed.py) (7/7 tests passing; 73/73 total project suite passing).
-  - **Phase B: Technical Engine & Two-Stage State Machine** (⏳ NEXT UP)
-  - **Phase C: Watchlist, Portfolio Tracker, Soft Stop & Target Sentinel** (⏳ Pending)
+  - **Phase B: Technical Engine & Two-Stage State Machine** (✅ COMPLETE)
+    - [`src/scanner/low_scanner.py`](file:///Users/aswinkarthik.th/.gemini/antigravity-ide/scratch/quant-copilot/src/scanner/low_scanner.py): `LowCapitulationScanner` implementing the 3-step funnel (NSE 52W-low discovery, Screener fundamental audit, targeted OHLCV analysis for volume anomaly $3\times$ to $20\times$, automated support/EMA targets, and Stage 2 buy confirmation state machine).
+    - Tests: [`tests/test_52_low_scanner.py`](file:///Users/aswinkarthik.th/.gemini/antigravity-ide/scratch/quant-copilot/tests/test_52_low_scanner.py) (8/8 tests passing; 81/81 total project suite passing).
+  - **Phase C: Watchlist, Portfolio Tracker, Soft Stop & Target Sentinel** (⏳ NEXT UP)
   - **Phase D: Conversational Trigger ('Whats today for 52') & CLI Runner** (⏳ Pending)
 
 ### 2. 52-Week High Dual-Mode Strategy ([`docs/STRATEGY_52_WEEK_HIGH.md`](file:///Users/aswinkarthik.th/.gemini/antigravity-ide/scratch/quant-copilot/docs/STRATEGY_52_WEEK_HIGH.md))

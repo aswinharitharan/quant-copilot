@@ -12,6 +12,7 @@ from src.scanner.models import (
 )
 from src.scanner.screener_client import ScreenerClient
 from src.scanner.insider_feed import InsiderFeed
+from src.scanner.low_scanner import LowCapitulationScanner
 
 __all__ = [
     "FundamentalAudit",
@@ -24,5 +25,6 @@ __all__ = [
     "DailyDashboard52",
     "ScreenerClient",
     "InsiderFeed",
+    "LowCapitulationScanner",
 ]
 

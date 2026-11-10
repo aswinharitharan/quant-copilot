@@ -1,8 +1,8 @@
 # Master Implementation Plan: 52-Week Low Capitulation Strategy & Scanner System
 
 > **Repository File**: `docs/PLAN_52_WEEK_LOW_STRATEGY.md`  
-> **Status**: **Phase A Complete ✅ | Ready for Phase B ⏳**  
-> **Current Test Suite**: 73/73 tests passing (`.venv/bin/pytest tests/`)  
+> **Status**: **Phase B Complete ✅ | Ready for Phase C ⏳**  
+> **Current Test Suite**: 81/81 tests passing (`.venv/bin/pytest tests/`)  
 > **Master Context Registry**: [`docs/PROJECT_STATUS.md`](file:///Users/aswinkarthik.th/.gemini/antigravity-ide/scratch/quant-copilot/docs/PROJECT_STATUS.md)  
 > **Living Strategy Spec**: [`docs/STRATEGY_52_WEEK_LOW.md`](file:///Users/aswinkarthik.th/.gemini/antigravity-ide/scratch/quant-copilot/docs/STRATEGY_52_WEEK_LOW.md)
 
@@ -80,27 +80,13 @@ flowchart TD
 
 ---
 
-### Phase B: Technical Engine & Two-Stage State Machine (⏳ NEXT UP)
-- **File**: `src/scanner/low_scanner.py`
-- **Responsibilities**:
-  1. Integrates with `SmartCacheManager` and `AngelOneProvider` / `YFinanceProvider` to scan universe of stocks (e.g. Nifty 500 or selected basket).
-  2. **Stage 1 (Radar Detection)**:
-     - Daily Low $\le$ 52-Week Low (within 0.5% tolerance).
-     - Volume Anomaly: $\text{Volume}_{\text{today}} \ge 3\times$ to $10\times \text{SMA}_{20}(\text{Volume})$.
-     - Automatically calls `ScreenerClient.audit_company(symbol)`.
-     - Automatically calls `InsiderFeed.get_symbol_insider_activity(symbol)`.
-     - Calculates Automated Levels:
-       - **Support SL**: Capitulation Candle Low.
-       - **Target 1**: 20-Day EMA.
-       - **Target 2**: 50-Day EMA.
-  3. **Stage 2 (Confirmation Trigger)**:
-     - Checks T+1 / T+2 price action: did price hold above the capitulation low? Did price close above the capitulation candle's high or above the 5-day EMA?
-     - Scans active stocks in user's **Watchlist** to generate actionable `BUY_TRIGGER` alerts.
-- **Tests**: `tests/test_52_low_scanner.py` (synthesize test OHLCV data with known volume anomalies, verify level calculations, verify Stage 1 $\to$ Stage 2 state transitions).
+### Phase B: Technical Engine & Two-Stage State Machine (✅ COMPLETE)
+- [`src/scanner/low_scanner.py`](file:///Users/aswinkarthik.th/.gemini/antigravity-ide/scratch/quant-copilot/src/scanner/low_scanner.py): `LowCapitulationScanner` implementing the 3-step funnel (NSE 52W-low discovery, Screener fundamental audit, targeted OHLCV analysis for volume anomaly $3\times$ to $20\times$, automated support/EMA targets, and Stage 2 buy confirmation state machine).
+- Tests: [`tests/test_52_low_scanner.py`](file:///Users/aswinkarthik.th/.gemini/antigravity-ide/scratch/quant-copilot/tests/test_52_low_scanner.py) (8/8 tests passing; 81/81 total project suite passing).
 
 ---
 
-### Phase C: Watchlist, Portfolio Tracker, Soft Stop & Target Sentinel (⏳ Pending)
+### Phase C: Watchlist, Portfolio Tracker, Soft Stop & Target Sentinel (⏳ NEXT UP)
 - **Files**: `src/scanner/tracker.py`, `src/scanner/service.py`
 - **Responsibilities**:
   1. Manage 3 persistent JSON files:
@@ -137,3 +123,4 @@ flowchart TD
 - **Automated Tests**: `.venv/bin/pytest tests/` (must stay 100% green).
 - **Zero Lookahead Bias**: Technical indicators computed strictly on EOD close or shift(1) intraday.
 - **Cross-Platform**: Full Windows/Mac compatibility using `pathlib.Path` and UTF-8 encoding.
+
