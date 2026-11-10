@@ -223,6 +223,44 @@ class ScannerService:
     # 2. MODULAR FAST QUERIES (LIGHTWEIGHT)
     # -------------------------------------------------------------------------
 
+    def scan_radar_candidates(
+        self,
+        candidate_symbols: Optional[List[str]] = None,
+        as_of_date: Optional[str] = None,
+    ) -> Tuple[List[CapitulationSignal], str]:
+        """Scan, filter, and audit 52-week low capitulation candidates only.
+        
+        Does NOT touch active portfolio or watchlist triggers.
+        Focused strictly on discovery, volume anomaly verification, and fundamental solvency.
+        """
+        dt_str = as_of_date or datetime.now(timezone.utc).strftime("%Y-%m-%d")
+        signals = self.scanner.run_funnel_scan(
+            candidate_symbols=candidate_symbols,
+            as_of_date=as_of_date,
+        )
+
+        lines: List[str] = [
+            f"# 📡 52-Week Low Capitulation Radar ({dt_str})",
+            f"Evaluated candidate universe for 52W lows, volume anomalies (≥ 3x), and 5 Golden Solvency Rules.",
+            "",
+        ]
+
+        if signals:
+            lines.append("| Symbol | Day Low | Day Close | Volume Ratio | Support SL | Target 1 (20 EMA) | Target 2 (50 EMA) | Audit Result | Promoter Buying |")
+            lines.append("| :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- |")
+            for s in signals:
+                insider_text = f"₹{s.insider_activity.value_inr/1e7:.1f} Cr" if s.insider_activity else "None"
+                audit_summary = f"D/E: {s.audit.debt_to_equity}, ROCE: {s.audit.roce_pct}%"
+                lines.append(
+                    f"| **{s.symbol}** | ₹{s.low_price:.2f} | ₹{s.close_price:.2f} | **{s.volume_ratio:.2f}x** | ₹{s.support_sl:.2f} | ₹{s.target_1_20ema:.2f} | ₹{s.target_2_50ema:.2f} | ✅ {audit_summary} | {insider_text} |"
+                )
+            lines.append("")
+            lines.append("💡 *To shortlist any of these stocks, tell your copilot: `Add <SYMBOL> to 52 watchlist`.*")
+        else:
+            lines.append("*No stocks met both the 52W low volume anomaly ($3x$) and the 5 Golden Solvency Rules today.*")
+
+        return signals, "\n".join(lines)
+
     def get_portfolio_summary(self, current_prices: Optional[Dict[str, float]] = None) -> Tuple[List[PortfolioStock], str]:
         """Fast (< 1s) portfolio check without running any market scans."""
         portfolio = self.tracker.get_portfolio()

@@ -35,6 +35,11 @@ def main():
     p_daily.add_argument("--symbols", nargs="*", help="Optional specific list of candidate symbols to scan")
     p_daily.add_argument("--date", help="Optional as-of date (YYYY-MM-DD)")
 
+    # 1b. Radar Scan (Only Discovery + Filter + Audit)
+    p_radar = subparsers.add_parser("radar", help="Scan, filter and audit 52-week low stocks without checking portfolio")
+    p_radar.add_argument("--symbols", nargs="*", help="Optional specific candidate symbols to filter and audit")
+    p_radar.add_argument("--date", help="Optional as-of date (YYYY-MM-DD)")
+
     # 2. Portfolio Health
     subparsers.add_parser("portfolio", help="Quick view of Tier 2 active portfolio & soft stop badges")
 
@@ -77,6 +82,14 @@ def main():
         )
         md = service.format_daily_briefing_markdown(dashboard)
         print("\n" + md)
+
+    elif args.command == "radar":
+        print("📡 Running 52-Week Low Radar (Discovery + Filter + Audit)...")
+        _, summary = service.scan_radar_candidates(
+            candidate_symbols=args.symbols,
+            as_of_date=args.date,
+        )
+        print("\n" + summary)
 
     elif args.command == "portfolio":
         _, summary = service.get_portfolio_summary()
