@@ -13,6 +13,7 @@ from src.scanner.models import (
 from src.scanner.screener_client import ScreenerClient
 from src.scanner.insider_feed import InsiderFeed
 from src.scanner.low_scanner import LowCapitulationScanner
+from src.scanner.tracker import PortfolioTracker
 
 __all__ = [
     "FundamentalAudit",
@@ -26,5 +27,6 @@ __all__ = [
     "ScreenerClient",
     "InsiderFeed",
     "LowCapitulationScanner",
+    "PortfolioTracker",
 ]
 

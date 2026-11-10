@@ -1,5 +1,6 @@
 """Pydantic data models for QuantCopilot's 52-Week Strategy & Scanner."""
 
+from datetime import datetime, timezone
 from enum import Enum
 from typing import List, Optional
 from pydantic import BaseModel, Field
@@ -102,9 +103,15 @@ class WatchlistStock(BaseModel):
     target_1_20ema: float
     target_2_50ema: float
     notes: Optional[str] = ""
+    history_notes: List[str] = Field(default_factory=list)
     is_buy_triggered: bool = False
     trigger_date: Optional[str] = None
     trigger_price: Optional[float] = None
+
+    def add_note(self, note: str, timestamp: Optional[str] = None):
+        """Append a timestamped note to the history log."""
+        ts = timestamp or datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M UTC")
+        self.history_notes.append(f"[{ts}] {note}")
 
 
 # -------------------------------------------------------------------------
@@ -120,6 +127,7 @@ class TradeSellRecord(BaseModel):
     proceeds_inr: float
     realized_pnl_inr: float
     realized_pnl_pct: float
+    notes: Optional[str] = ""
 
 
 class PortfolioStock(BaseModel):
@@ -136,7 +144,14 @@ class PortfolioStock(BaseModel):
     dist_from_sl_pct: float        # (current_price - capitulation_low) / capitulation_low * 100
     unrealized_pnl_pct: float      # (current_price - entry_price) / entry_price * 100
     status_badge: StockStatusBadge = StockStatusBadge.SAFE
+    notes: Optional[str] = ""
+    history_notes: List[str] = Field(default_factory=list)
     partial_sells: List[TradeSellRecord] = Field(default_factory=list)
+
+    def add_note(self, note: str, timestamp: Optional[str] = None):
+        """Append a timestamped note to the history log."""
+        ts = timestamp or datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M UTC")
+        self.history_notes.append(f"[{ts}] {note}")
 
 
 class ClosedTradeLedger(BaseModel):
@@ -152,6 +167,8 @@ class ClosedTradeLedger(BaseModel):
     net_realized_pnl_inr: float
     net_return_pct: float
     holding_duration_days: int
+    notes: Optional[str] = ""
+    history_notes: List[str] = Field(default_factory=list)
 
 
 # -------------------------------------------------------------------------

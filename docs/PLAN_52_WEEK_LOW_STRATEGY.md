@@ -1,8 +1,8 @@
 # Master Implementation Plan: 52-Week Low Capitulation Strategy & Scanner System
 
 > **Repository File**: `docs/PLAN_52_WEEK_LOW_STRATEGY.md`  
-> **Status**: **Phase B Complete ✅ | Ready for Phase C ⏳**  
-> **Current Test Suite**: 81/81 tests passing (`.venv/bin/pytest tests/`)  
+> **Status**: **Phase C Complete ✅ | Ready for Phase D ⏳**  
+> **Current Test Suite**: 86/86 tests passing (`.venv/bin/pytest tests/`)  
 > **Master Context Registry**: [`docs/PROJECT_STATUS.md`](file:///Users/aswinkarthik.th/.gemini/antigravity-ide/scratch/quant-copilot/docs/PROJECT_STATUS.md)  
 > **Living Strategy Spec**: [`docs/STRATEGY_52_WEEK_LOW.md`](file:///Users/aswinkarthik.th/.gemini/antigravity-ide/scratch/quant-copilot/docs/STRATEGY_52_WEEK_LOW.md)
 
@@ -86,26 +86,13 @@ flowchart TD
 
 ---
 
-### Phase C: Watchlist, Portfolio Tracker, Soft Stop & Target Sentinel (⏳ NEXT UP)
-- **Files**: `src/scanner/tracker.py`, `src/scanner/service.py`
-- **Responsibilities**:
-  1. Manage 3 persistent JSON files:
-     - `data/watchlist_52_low.json`: Watched stocks.
-     - `data/portfolio_52_low.json`: Active holdings.
-     - `data/trade_history_52_low.json`: Closed trade ledger.
-  2. Implement partial scaling out: record partial sells at Target 1 (50%) and Target 2 or SL.
-  3. Auto-archive to `trade_history_52_low.json` when `remaining_quantity == 0`.
-  4. Daily soft stop sentinel checks:
-     - 🟢 **SAFE**: Price $> +3.0\%$ above Capitulation Low.
-     - 🟡 **RADAR ALERT**: Price within $1.5\%$ of Capitulation Low.
-     - 🔴 **DECISION REQD**: Price closed below Capitulation Low at 3:30 PM.
-     - 🎯 **TARGET 1 HIT**: Price $\ge$ 20 EMA.
-     - 🏆 **TARGET 2 HIT**: Price $\ge$ 50 EMA.
-- **Tests**: `tests/test_scanner_service.py` & `tests/test_tracker.py`.
+### Phase C: Watchlist, Portfolio Tracker, Soft Stop & Target Sentinel (✅ COMPLETE)
+- [`src/scanner/tracker.py`](file:///Users/aswinkarthik.th/.gemini/antigravity-ide/scratch/quant-copilot/src/scanner/tracker.py): `PortfolioTracker` managing the 3-tier persistent JSON architecture (`data/watchlist_52_low.json`, `data/portfolio_52_low.json`, `data/trade_history_52_low.json`), contextual event audit notes (`history_notes`), cascading capitulation resets, partial scaling (50% book at T1, 50% at T2), auto-archiving, and daily status badges (`SAFE`, `RADAR_ALERT`, `DECISION_REQD`, `TARGET_1_HIT`, `TARGET_2_HIT`).
+- Tests: [`tests/test_tracker.py`](file:///Users/aswinkarthik.th/.gemini/antigravity-ide/scratch/quant-copilot/tests/test_tracker.py) (5/5 tests passing; 86/86 total project suite passing).
 
 ---
 
-### Phase D: Conversational Trigger ('Whats today for 52') & CLI Runner (⏳ Pending)
+### Phase D: Conversational Trigger ('Whats today for 52') & CLI Runner (⏳ NEXT UP)
 - **Files**: `scripts/run_52_scanner.py`, MCP wrapper.
 - **Responsibilities**:
   1. CLI runner to execute scans or view active portfolio status.
