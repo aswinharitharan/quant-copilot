@@ -316,15 +316,22 @@ class SmartCacheManager:
             fetched_dfs: List[pd.DataFrame] = []
 
             for delta_start, delta_end in missing_deltas:
-                df_gap = prov.fetch_candles(
-                    symbol=symbol,
-                    exchange=exchange,
-                    interval=interval,
-                    start_date=delta_start,
-                    end_date=delta_end,
-                )
-                if not df_gap.empty:
-                    fetched_dfs.append(df_gap)
+                try:
+                    df_gap = prov.fetch_candles(
+                        symbol=symbol,
+                        exchange=exchange,
+                        interval=interval,
+                        start_date=delta_start,
+                        end_date=delta_end,
+                    )
+                    if not df_gap.empty:
+                        fetched_dfs.append(df_gap)
+                except DataProviderError as e:
+                    # If this was an incremental delta on top of an existing master cache and
+                    # the delta range had 0 candles (e.g., weekend or market holiday), do not crash.
+                    if master_path.exists() and "0 candles" in str(e):
+                        continue
+                    raise
 
             if fetched_dfs:
                 combined_new = pd.concat(fetched_dfs)
