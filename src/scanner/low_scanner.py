@@ -446,6 +446,16 @@ class LowCapitulationScanner:
                     updated.append(stock)
                     continue
 
+                latest_dt = (
+                    df.index[-1].strftime("%Y-%m-%d")
+                    if hasattr(df.index[-1], "strftime")
+                    else str(df.index[-1])[:10]
+                )
+                # Only evaluate follow-through bars strictly after capitulation_date
+                if stock.capitulation_date and latest_dt <= stock.capitulation_date:
+                    updated.append(stock)
+                    continue
+
                 # Get latest daily candle
                 latest_bar = df.iloc[-1]
                 ema5 = float(df["close"].ewm(span=5, adjust=False).mean().iloc[-1]) if len(df) >= 5 else None
@@ -459,9 +469,20 @@ class LowCapitulationScanner:
 
                 if stage == SignalStage.CONFIRMED_BUY:
                     stock.is_buy_triggered = True
-                    trigger_dt = df.index[-1].strftime("%Y-%m-%d") if hasattr(df.index[-1], "strftime") else str(df.index[-1])[:10]
-                    stock.trigger_date = trigger_dt
+                    stock.trigger_date = latest_dt
                     stock.trigger_price = trigger_px
+                    stock.add_note(
+                        f"Stage 2 BUY TRIGGERED on {latest_dt} @ ₹{trigger_px:.2f} "
+                        f"(Pivot High: ₹{stock.capitulation_high:.2f}"
+                        + (f", 5 EMA: ₹{ema5:.2f}" if ema5 is not None else "")
+                        + ")."
+                    )
+                elif stage == SignalStage.INVALIDATED:
+                    marker = f"Support invalidated on {latest_dt}"
+                    if not any(marker in n for n in stock.history_notes):
+                        stock.add_note(
+                            f"{marker}: closed @ ₹{trigger_px:.2f} below capitulation low ₹{stock.capitulation_low:.2f}."
+                        )
 
             except Exception as e:
                 logger.warning(f"Error checking watchlist for {stock.symbol}: {e}")

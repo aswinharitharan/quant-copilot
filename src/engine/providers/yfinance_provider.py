@@ -58,9 +58,15 @@ class YFinanceProvider(BaseDataProvider):
         yf_ticker = self._resolve_ticker(symbol, exchange)
         yf_interval = self.INTERVAL_MAP.get(interval, interval)
 
+        # yfinance treats `end` as exclusive, so add 1 calendar day to make `end_date` inclusive
+        try:
+            yf_end = (pd.to_datetime(end_date) + pd.Timedelta(days=1)).strftime("%Y-%m-%d")
+        except Exception:
+            yf_end = end_date
+
         try:
             ticker = yf.Ticker(yf_ticker)
-            df = ticker.history(start=start_date, end=end_date, interval=yf_interval)
+            df = ticker.history(start=start_date, end=yf_end, interval=yf_interval)
         except Exception as e:
             raise DataProviderError(f"Failed to fetch data from yfinance for '{yf_ticker}': {e}") from e
 

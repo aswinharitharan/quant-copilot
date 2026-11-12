@@ -128,3 +128,38 @@ def test_yfinance_ticker_mapping():
     # Already formatted tickers
     assert provider._resolve_ticker("TCS.NS", "NSE") == "TCS.NS"
     assert provider._resolve_ticker("^NSEI", "NSE") == "^NSEI"
+
+
+def test_yfinance_inclusive_end_date(monkeypatch):
+    """YFinance treats `end` as exclusive, so YFinanceProvider must add 1 day."""
+    captured = {}
+
+    class DummyTicker:
+        def __init__(self, ticker_str):
+            captured["ticker"] = ticker_str
+
+        def history(self, start=None, end=None, interval=None):
+            captured["start"] = start
+            captured["end"] = end
+            captured["interval"] = interval
+            dates = pd.date_range("2026-11-11", "2026-11-12", freq="D")
+            return pd.DataFrame(
+                {
+                    "Open": [100.0, 102.0],
+                    "High": [105.0, 106.0],
+                    "Low": [99.0, 101.0],
+                    "Close": [101.0, 104.0],
+                    "Volume": [1000, 1200],
+                },
+                index=dates,
+            )
+
+    monkeypatch.setattr("src.engine.providers.yfinance_provider.yf.Ticker", DummyTicker)
+    provider = YFinanceProvider()
+    df = provider.fetch_candles("PIIND", exchange="NSE", interval="1d", start_date="2026-11-11", end_date="2026-11-12")
+
+    assert captured["ticker"] == "PIIND.NS"
+    assert captured["start"] == "2026-11-11"
+    assert captured["end"] == "2026-11-13"
+    assert len(df) == 2
+    assert df.index[-1].strftime("%Y-%m-%d") == "2026-11-12"

@@ -41,10 +41,12 @@ def main():
     p_radar.add_argument("--date", help="Optional as-of date (YYYY-MM-DD)")
 
     # 2. Portfolio Health
-    subparsers.add_parser("portfolio", help="Quick view of Tier 2 active portfolio & soft stop badges")
+    p_port = subparsers.add_parser("portfolio", help="Quick view of Tier 2 active portfolio & soft stop badges")
+    p_port.add_argument("--date", help="Optional as-of date (YYYY-MM-DD)")
 
     # 3. Watchlist
-    subparsers.add_parser("watchlist", help="Quick view of Tier 1 watchlist & Stage 2 buy triggers")
+    p_watch = subparsers.add_parser("watchlist", help="Quick view of Tier 1 watchlist & Stage 2 buy triggers")
+    p_watch.add_argument("--date", help="Optional as-of date (YYYY-MM-DD)")
 
     # 4. Audit
     p_audit = subparsers.add_parser("audit", help="Run fundamental & insider audit on a single symbol")
@@ -92,11 +94,11 @@ def main():
         print("\n" + summary)
 
     elif args.command == "portfolio":
-        _, summary = service.get_portfolio_summary()
+        _, summary = service.get_portfolio_summary(as_of_date=args.date)
         print("\n" + summary)
 
     elif args.command == "watchlist":
-        _, summary = service.get_watchlist_summary()
+        _, summary = service.get_watchlist_summary(as_of_date=args.date)
         print("\n" + summary)
 
     elif args.command == "audit":

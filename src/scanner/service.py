@@ -9,7 +9,7 @@ Ties together:
 """
 
 import logging
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple, Union
 
@@ -68,6 +68,54 @@ class ScannerService:
             cache_dir=cache_dir,
         )
 
+    IST = timezone(timedelta(hours=5, minutes=30))
+
+    @classmethod
+    def _today_ist(cls) -> str:
+        """Return today's date in IST (YYYY-MM-DD)."""
+        return datetime.now(cls.IST).strftime("%Y-%m-%d")
+
+    def _get_recent_daily_bars(
+        self,
+        symbol: str,
+        as_of_date: Optional[str] = None,
+        lookback_days: int = 60,
+    ) -> Optional[pd.DataFrame]:
+        """Fetch recent daily OHLCV candles for a symbol via cache_manager."""
+        if not self.cache_manager:
+            return None
+        end_d = as_of_date or self._today_ist()
+        start_d = (pd.to_datetime(end_d) - pd.Timedelta(days=lookback_days)).strftime("%Y-%m-%d")
+        try:
+            df = self.cache_manager.get_candles(
+                symbol=symbol,
+                exchange="NSE",
+                interval="1d",
+                start_date=start_d,
+                end_date=end_d,
+            )
+            if df is not None and not df.empty:
+                return df
+        except Exception as e:
+            logger.warning(f"Failed to fetch daily bars for {symbol}: {e}")
+        return None
+
+    def _fetch_latest_prices(
+        self,
+        symbols: List[str],
+        as_of_date: Optional[str] = None,
+    ) -> Dict[str, float]:
+        """Fetch latest closing/traded price for each symbol from daily candles."""
+        prices: Dict[str, float] = {}
+        for sym in symbols:
+            clean_sym = sym.upper()
+            df = self._get_recent_daily_bars(clean_sym, as_of_date=as_of_date, lookback_days=15)
+            if df is not None and not df.empty:
+                col = "close" if "close" in df.columns else "Close"
+                if col in df.columns:
+                    prices[clean_sym] = round(float(df[col].iloc[-1]), 2)
+        return prices
+
     # -------------------------------------------------------------------------
     # 1. DAILY BRIEFING ("Whats today for 52")
     # -------------------------------------------------------------------------
@@ -86,7 +134,7 @@ class ScannerService:
         3. Runs Daily Sentinel over Active Portfolio
         4. Correlates material insider disclosures
         """
-        dt_str = as_of_date or datetime.now(timezone.utc).strftime("%Y-%m-%d")
+        dt_str = as_of_date or self._today_ist()
 
         # 1. New Stage 1 Signals
         new_signals: List[CapitulationSignal] = []
@@ -103,19 +151,11 @@ class ScannerService:
         watchlist = self.tracker.get_watchlist()
         triggered_watchlist: List[WatchlistStock] = []
         if watchlist:
-            def _get_bars(sym: str) -> Optional[pd.DataFrame]:
-                if self.cache_manager:
-                    return self.cache_manager.get_candles(
-                        symbol=sym,
-                        exchange="NSE",
-                        interval="1d",
-                        start_date=(pd.to_datetime(dt_str) - pd.Timedelta(days=60)).strftime("%Y-%m-%d"),
-                        end_date=dt_str,
-                    )
-                return None
-
             try:
-                updated_watchlist = self.scanner.check_watchlist(watchlist, _get_bars)
+                updated_watchlist = self.scanner.check_watchlist(
+                    watchlist,
+                    lambda sym: self._get_recent_daily_bars(sym, as_of_date=dt_str),
+                )
                 self.tracker._save_watchlist(updated_watchlist)
                 triggered_watchlist = [s for s in updated_watchlist if s.is_buy_triggered]
             except Exception as e:
@@ -123,8 +163,11 @@ class ScannerService:
 
         # 3. Sentinel Health Evaluation for Active Portfolio
         portfolio = self.tracker.get_portfolio()
-        if portfolio and current_prices:
-            portfolio = self.tracker.evaluate_portfolio_health(current_prices)
+        if portfolio:
+            if current_prices is None:
+                current_prices = self._fetch_latest_prices([p.symbol for p in portfolio], as_of_date=dt_str)
+            if current_prices:
+                portfolio = self.tracker.evaluate_portfolio_health(current_prices)
 
         # 4. Material Insider Trades
         insider_trades: List[InsiderTradeRecord] = []
@@ -233,7 +276,7 @@ class ScannerService:
         Does NOT touch active portfolio or watchlist triggers.
         Focused strictly on discovery, volume anomaly verification, and fundamental solvency.
         """
-        dt_str = as_of_date or datetime.now(timezone.utc).strftime("%Y-%m-%d")
+        dt_str = as_of_date or self._today_ist()
         signals = self.scanner.run_funnel_scan(
             candidate_symbols=candidate_symbols,
             as_of_date=as_of_date,
@@ -261,14 +304,21 @@ class ScannerService:
 
         return signals, "\n".join(lines)
 
-    def get_portfolio_summary(self, current_prices: Optional[Dict[str, float]] = None) -> Tuple[List[PortfolioStock], str]:
-        """Fast (< 1s) portfolio check without running any market scans."""
+    def get_portfolio_summary(
+        self,
+        current_prices: Optional[Dict[str, float]] = None,
+        as_of_date: Optional[str] = None,
+    ) -> Tuple[List[PortfolioStock], str]:
+        """Fast portfolio check with automatic latest-price refresh."""
         portfolio = self.tracker.get_portfolio()
-        if portfolio and current_prices:
-            portfolio = self.tracker.evaluate_portfolio_health(current_prices)
-
         if not portfolio:
             return [], "🛡️ **Active Portfolio**: 0 open positions."
+
+        if current_prices is None:
+            current_prices = self._fetch_latest_prices([p.symbol for p in portfolio], as_of_date=as_of_date)
+
+        if current_prices:
+            portfolio = self.tracker.evaluate_portfolio_health(current_prices)
 
         lines = [f"🛡️ **Active Portfolio Status** ({len(portfolio)} holdings):"]
         for p in portfolio:
@@ -280,27 +330,51 @@ class ScannerService:
                 StockStatusBadge.TARGET_2_HIT: "🏆 TARGET 2 HIT",
             }.get(p.status_badge, str(p.status_badge.value))
 
+            unrealized_inr = (p.current_price - p.entry_price) * p.remaining_quantity
             lines.append(
                 f"- **{p.symbol}**: {badge_icon} | Current: ₹{p.current_price:.2f} | Entry: ₹{p.entry_price:.2f} | "
-                f"PnL: {p.unrealized_pnl_pct:+.2f}% | SL: ₹{p.capitulation_low:.2f} ({p.dist_from_sl_pct:+.1f}%) | "
-                f"Qty: {p.remaining_quantity}"
+                f"PnL: {p.unrealized_pnl_pct:+.2f}% (₹{unrealized_inr:+,.2f}) | "
+                f"SL: ₹{p.capitulation_low:.2f} ({p.dist_from_sl_pct:+.1f}%) | "
+                f"T1: ₹{p.target_1_20ema:.2f} | T2: ₹{p.target_2_50ema:.2f} | Qty: {p.remaining_quantity}"
             )
             if p.history_notes:
                 lines.append(f"  *Latest Note*: {p.history_notes[-1]}")
 
         return portfolio, "\n".join(lines)
 
-    def get_watchlist_summary(self) -> Tuple[List[WatchlistStock], str]:
-        """Fast (< 1s) review of Tier 1 Watchlist."""
+    def get_watchlist_summary(self, as_of_date: Optional[str] = None) -> Tuple[List[WatchlistStock], str]:
+        """Review Tier 1 Watchlist with automatic Stage 2 trigger evaluation and latest prices."""
         watchlist = self.tracker.get_watchlist()
         if not watchlist:
             return [], "📋 **Watchlist**: 0 stocks currently watched."
 
+        bars_map: Dict[str, Optional[pd.DataFrame]] = {}
+        for w in watchlist:
+            bars_map[w.symbol] = self._get_recent_daily_bars(w.symbol, as_of_date=as_of_date)
+
+        if any(df is not None for df in bars_map.values()):
+            watchlist = self.scanner.check_watchlist(watchlist, lambda sym: bars_map.get(sym))
+            self.tracker._save_watchlist(watchlist)
+
         lines = [f"📋 **Tier 1 Watchlist** ({len(watchlist)} stocks):"]
         for w in watchlist:
-            status = "🟢 BUY TRIGGERED" if w.is_buy_triggered else "⏳ Awaiting Stage 2"
+            df = bars_map.get(w.symbol)
+            latest_px_str = ""
+            if df is not None and not df.empty:
+                col = "close" if "close" in df.columns else "Close"
+                if col in df.columns:
+                    latest_px_str = f"Current: ₹{float(df[col].iloc[-1]):.2f} | "
+
+            if w.is_buy_triggered:
+                trig_info = f" on {w.trigger_date}" if w.trigger_date else ""
+                trig_px = f" @ ₹{w.trigger_price:.2f}" if w.trigger_price else ""
+                status = f"🟢 BUY TRIGGERED{trig_info}{trig_px}"
+            else:
+                status = "⏳ Awaiting Stage 2"
+
             lines.append(
-                f"- **{w.symbol}** ({status}): Capitulation Low: ₹{w.capitulation_low:.2f} | "
+                f"- **{w.symbol}** ({status}): {latest_px_str}Pivot High: ₹{w.capitulation_high:.2f} | "
+                f"Support SL: ₹{w.capitulation_low:.2f} | "
                 f"T1 (20 EMA): ₹{w.target_1_20ema:.2f} | T2 (50 EMA): ₹{w.target_2_50ema:.2f} | Notes: '{w.notes or '-'}'"
             )
 
