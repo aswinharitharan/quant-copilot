@@ -442,3 +442,24 @@ class ScannerService:
             notes=notes,
         )
 
+    def add_to_watchlist(
+        self,
+        symbol: str,
+        user_notes: Optional[str] = None,
+        as_of_date: Optional[str] = None,
+    ) -> Optional[WatchlistStock]:
+        """Scan candidate symbol and add to Tier 1 Watchlist if valid signal found."""
+        clean_sym = symbol.upper().replace(".NS", "").replace(".BO", "")
+        sig = self.scanner.scan_candidate(clean_sym, as_of_date=as_of_date)
+        if sig is None:
+            logger.warning(f"Could not generate capitulation signal for {clean_sym}")
+            return None
+        return self.tracker.add_to_watchlist(
+            sig,
+            user_notes=user_notes,
+            added_date=as_of_date or self._today_ist(),
+        )
+
+    def remove_from_watchlist(self, symbol: str) -> bool:
+        """Remove symbol from Tier 1 Watchlist."""
+        return self.tracker.remove_from_watchlist(symbol)

@@ -309,3 +309,39 @@ def test_portfolio_and_watchlist_auto_fetch_latest_prices(tmp_path: Path):
     assert len(dashboard.watchlist_buy_triggers) == 1
     assert dashboard.watchlist_buy_triggers[0].symbol == "AIAENG"
 
+
+def test_add_and_remove_watchlist_via_service(tmp_path: Path):
+    """Verify ScannerService.add_to_watchlist and remove_from_watchlist facade methods."""
+    cache_d = tmp_path / "cache"
+    data_d = tmp_path / "data"
+    cache_d.mkdir()
+    data_d.mkdir()
+
+    dates = pd.date_range(end="2026-11-12", periods=30, freq="B", tz="Asia/Kolkata")
+    closes = [3000.0 - i * 10 for i in range(30)]
+    lows = [c - 20.0 for c in closes]
+    highs = [c + 30.0 for c in closes]
+    vols = [100_000] * 29 + [500_000]  # 5x anomaly on last day
+    df = pd.DataFrame(
+        {"open": closes, "high": highs, "low": lows, "close": closes, "volume": vols},
+        index=dates,
+    )
+
+    service = ScannerService(
+        cache_dir=str(cache_d),
+        data_dir=str(data_d),
+        cache_manager=MockCacheManager({"THERMAX": df}),
+        screener_client=MockScreener(),
+        insider_feed=MockInsider(),
+    )
+
+    added = service.add_to_watchlist("THERMAX", user_notes="5x climax", as_of_date="2026-11-12")
+    assert added is not None
+    assert added.symbol == "THERMAX"
+    assert added.added_date == "2026-11-12"
+    assert len(service.tracker.get_watchlist()) == 1
+
+    assert service.remove_from_watchlist("THERMAX") is True
+    assert len(service.tracker.get_watchlist()) == 0
+    assert service.remove_from_watchlist("THERMAX") is False
+
