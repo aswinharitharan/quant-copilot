@@ -7,7 +7,7 @@ risk sentinels (Max Daily Loss, Market Open Gate, Square-Off),
 and realistic Indian market transaction costs.
 """
 
-from datetime import datetime, time, timedelta
+from datetime import datetime, time, timedelta, date
 from typing import Dict, List, Optional
 import uuid
 import pandas as pd
@@ -111,10 +111,12 @@ class Backtester:
         equity_records: Dict[datetime, float] = {}
         total_costs_paid = 0.0
 
-        current_trading_day: Optional[datetime.date] = None
+        current_trading_day: Optional[date] = None
         daily_trades_count = 0
         is_locked_for_day = False
         today_realized_pnl = 0.0
+        last_loss_bar_index = -999999
+        current_bar_index = 0
 
         market_open_time = time(9, 15, 0)
         delay_minutes = deploy.market_open_delay_minutes
@@ -129,7 +131,7 @@ class Backtester:
 
         # Helper: close a specific open position
         def close_position(pos_key: str, bar_time: datetime, exit_price: float, reason: str):
-            nonlocal current_cash, total_costs_paid, today_realized_pnl
+            nonlocal current_cash, total_costs_paid, today_realized_pnl, last_loss_bar_index
             pos = open_positions.pop(pos_key)
             pos.exit_time = bar_time
             pos.exit_price = exit_price
@@ -157,6 +159,9 @@ class Backtester:
             pos.costs.total = total_trade_costs
             pos.pnl_net = pos.pnl_gross - total_trade_costs
 
+            if pos.pnl_net is not None and pos.pnl_net < 0:
+                last_loss_bar_index = current_bar_index
+
             current_cash += pos.pnl_net
             total_costs_paid += exit_cost.total
             today_realized_pnl += pos.pnl_net
@@ -168,6 +173,7 @@ class Backtester:
         # MAIN BAR-BY-BAR LOOP
         # -------------------------------------------------------------
         for current_time, bar in df_work.iterrows():
+            current_bar_index += 1
             # Skip warmup bars before start_date
             if ts_start and current_time < ts_start:
                 continue
@@ -233,7 +239,11 @@ class Backtester:
                         close_position(k, current_time, signal_exec_price, reason="SET_EXIT_CONDITION")
 
             # 5. Check Entry Conditions
-            if not is_locked_for_day and (is_daily or bar_time_of_day >= allowed_start_time):
+            is_in_cooldown = (
+                deploy.cooldown_bars_after_loss > 0 and 
+                (current_bar_index - last_loss_bar_index) <= deploy.cooldown_bars_after_loss
+            )
+            if not is_locked_for_day and not is_in_cooldown and (is_daily or bar_time_of_day >= allowed_start_time):
                 for s in self.strategy.sets:
                     if daily_trades_count >= deploy.max_trades_per_day:
                         break

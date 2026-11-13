@@ -3,7 +3,7 @@ import numpy as np
 import pandas as pd
 from src.schema.strategy import IndicatorDefinition
 from src.engine.indicators import (
-    sma, ema, rsi, vwap, atr, supertrend, IndicatorEngine, IndicatorError
+    sma, ema, rsi, vwap, atr, supertrend, sma_envelope, adx, IndicatorEngine, IndicatorError
 )
 
 
@@ -93,10 +93,41 @@ def test_supertrend_structure(sample_ohlcv):
     assert set(res["direction"].unique()).issubset({1, -1})
 
 
+def test_sma_envelope_bands(sample_ohlcv):
+    res = sma_envelope(sample_ohlcv, period=10, atr_period=5, multiplier=1.5)
+    assert "upper" in res.columns
+    assert "lower" in res.columns
+    assert "middle" in res.columns
+    valid = res.dropna()
+    assert (valid["upper"] > valid["middle"]).all()
+    assert (valid["lower"] < valid["middle"]).all()
+
+
+def test_adx_bounds_and_structure(sample_ohlcv):
+    res = adx(sample_ohlcv, period=14)
+    assert "adx" in res.columns
+    assert "plus_di" in res.columns
+    assert "minus_di" in res.columns
+    valid = res["adx"].dropna()
+    assert (valid >= 0.0).all()
+    assert (valid <= 100.0).all()
+
+
 def test_indicator_engine_dispatch(sample_ohlcv):
     ind_def = IndicatorDefinition(name="SMA", params={"period": 20, "field": "close"})
     res = IndicatorEngine.compute(sample_ohlcv, ind_def)
     assert len(res) == len(sample_ohlcv)
+
+    # Test ADX dispatch
+    adx_def = IndicatorDefinition(name="ADX", params={"period": 14})
+    adx_res = IndicatorEngine.compute(sample_ohlcv, adx_def)
+    assert len(adx_res) == len(sample_ohlcv)
+    assert not adx_res.isna().all()
+
+    # Test SMA Envelope dispatch
+    env_def = IndicatorDefinition(name="SMA_ENVELOPE", params={"period": 10, "multiplier": 1.5, "band": "upper"})
+    env_res = IndicatorEngine.compute(sample_ohlcv, env_def)
+    assert len(env_res) == len(sample_ohlcv)
 
     with pytest.raises(IndicatorError, match="Unsupported indicator"):
         IndicatorEngine.compute(sample_ohlcv, IndicatorDefinition(name="UNKNOWN_IND"))

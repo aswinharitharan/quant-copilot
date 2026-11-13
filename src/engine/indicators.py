@@ -173,6 +173,90 @@ def supertrend(df: pd.DataFrame, period: int = 10, multiplier: float = 3.0) -> p
     )
 
 
+def sma_envelope(
+    df: pd.DataFrame, 
+    period: int = 200, 
+    atr_period: int = 14, 
+    multiplier: float = 1.5, 
+    field: str = "close"
+) -> pd.DataFrame:
+    """
+    SMA Envelope / ATR Dead-Zone Bands around SMA.
+    
+    Returns a DataFrame with columns:
+    - 'upper': sma + (multiplier * atr)
+    - 'lower': sma - (multiplier * atr)
+    - 'middle': sma
+    """
+    for col in ["high", "low", "close"]:
+        if col not in df.columns:
+            raise IndicatorError(f"Required column '{col}' missing for SMA Envelope calculation")
+            
+    mid = sma(df, period=period, field=field)
+    vol = atr(df, period=atr_period)
+    
+    upper = mid + (multiplier * vol)
+    lower = mid - (multiplier * vol)
+    
+    return pd.DataFrame(
+        {
+            "upper": upper,
+            "lower": lower,
+            "middle": mid,
+        },
+        index=df.index,
+    )
+
+
+def adx(df: pd.DataFrame, period: int = 14) -> pd.DataFrame:
+    """
+    Average Directional Index (ADX) by J. Welles Wilder Jr.
+    
+    Returns a DataFrame with columns:
+    - 'adx': Smoothed trend strength (0 to 100)
+    - 'plus_di': +DI positive directional indicator
+    - 'minus_di': -DI negative directional indicator
+    """
+    for col in ["high", "low", "close"]:
+        if col not in df.columns:
+            raise IndicatorError(f"Required column '{col}' missing for ADX calculation")
+            
+    high = df["high"]
+    low = df["low"]
+    
+    up_move = high - high.shift(1)
+    down_move = low.shift(1) - low
+    
+    plus_dm = np.where((up_move > down_move) & (up_move > 0), up_move, 0.0)
+    minus_dm = np.where((down_move > up_move) & (down_move > 0), down_move, 0.0)
+    
+    atr_vals = atr(df, period=period)
+    
+    # Wilder's smoothing (alpha = 1 / period)
+    plus_dm_s = pd.Series(plus_dm, index=df.index).ewm(alpha=1.0 / period, min_periods=period, adjust=False).mean()
+    minus_dm_s = pd.Series(minus_dm, index=df.index).ewm(alpha=1.0 / period, min_periods=period, adjust=False).mean()
+    
+    plus_di = 100.0 * (plus_dm_s / atr_vals.replace(0, np.nan))
+    minus_di = 100.0 * (minus_dm_s / atr_vals.replace(0, np.nan))
+    
+    di_sum = plus_di + minus_di
+    di_diff = (plus_di - minus_di).abs()
+    
+    dx = 100.0 * (di_diff / di_sum.replace(0, np.nan))
+    dx = dx.fillna(0.0)
+    
+    adx_s = dx.ewm(alpha=1.0 / period, min_periods=period, adjust=False).mean()
+    
+    return pd.DataFrame(
+        {
+            "adx": adx_s.fillna(0.0),
+            "plus_di": plus_di.fillna(0.0),
+            "minus_di": minus_di.fillna(0.0),
+        },
+        index=df.index,
+    )
+
+
 class IndicatorEngine:
     """
     Registry and Dispatcher for Technical Indicators.
@@ -219,6 +303,25 @@ class IndicatorEngine:
             if field in st_df.columns:
                 return st_df[field]
             return st_df["supertrend"]
+            
+        elif name in ("SMA_ENVELOPE", "SMA_BAND"):
+            period = int(params.get("period", 200))
+            atr_period = int(params.get("atr_period", 14))
+            multiplier = float(params.get("multiplier", 1.5))
+            field = str(params.get("field", "close"))
+            band = str(params.get("band", "upper")).lower()
+            env_df = sma_envelope(df, period=period, atr_period=atr_period, multiplier=multiplier, field=field)
+            if band in env_df.columns:
+                return env_df[band]
+            return env_df["upper"]
+            
+        elif name == "ADX":
+            period = int(params.get("period", 14))
+            field = str(params.get("field", "adx")).lower()
+            adx_df = adx(df, period=period)
+            if field in adx_df.columns:
+                return adx_df[field]
+            return adx_df["adx"]
             
         else:
             raise IndicatorError(f"Unsupported indicator: '{name}'")

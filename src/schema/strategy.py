@@ -174,6 +174,7 @@ class DeploymentSettings(BaseModel):
     limit_buffer_pct: float = Field(0.005, description="e.g. 0.005 for 0.5% buffer")
     market_open_delay_minutes: int = Field(5, description="Delay from open to start trading")
     intraday_square_off_time: Optional[str] = Field(None, description="HH:MM:SS format. Only used when execution_style=INTRADAY.")
+    cooldown_bars_after_loss: int = Field(default=0, description="Number of bars to wait after a losing trade before entering a new trade.")
     
     expiry_rollover_policy: ExpiryRolloverPolicy = Field(default=ExpiryRolloverPolicy.SQUARE_OFF)
 

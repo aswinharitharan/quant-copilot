@@ -2,7 +2,7 @@
 
 > **Purpose**: Read this file at the start of any new chat session to instantly restore full project context with minimal token usage.  
 > **Last Updated**: 2026-11-13  
-> **Current Active Phase**: Phase 1 (Core Quant & Execution Engine) + 52-Week Low Strategy Complete + 52-Week High Breakout Strategy Complete + Unified Orchestrator Complete; 126/126 tests passing  
+> **Current Active Phase**: Phase 1 (Core Quant & Execution Engine) + 52-Week Low Strategy Complete + 52-Week High Breakout Strategy Complete + Unified Orchestrator Complete + 200 SMA Sideways Enhancements Verified; 129/129 tests passing  
 
 ---
 
@@ -83,13 +83,13 @@ We execute Phase 1 in clear, self-contained chunks:
    - Multi-year pipeline: [`scripts/fetch_and_export_5yr_nestle.py`](file:///Users/aswinkarthik.th/.gemini/antigravity-ide/scratch/quant-copilot/scripts/fetch_and_export_5yr_nestle.py) (2022–2026, 29,290 candles, 0 unexpected missing days, Excel & Parquet exports).
    - **Upcoming Planned Enhancement**: Smart Incremental Master Cache (range-aware slicing & delta fetching to prevent duplicate API downloads).
 3. **Step 2B: Deterministic Backtest Engine** (✅ COMPLETE)
-   - [`src/engine/indicators.py`](file:///Users/aswinkarthik.th/.gemini/antigravity-ide/scratch/quant-copilot/src/engine/indicators.py) (Pure vectorized SMA, EMA, RSI, VWAP, ATR, Supertrend).
+   - [`src/engine/indicators.py`](file:///Users/aswinkarthik.th/.gemini/antigravity-ide/scratch/quant-copilot/src/engine/indicators.py) (Pure vectorized SMA, EMA, RSI, VWAP, ATR, Supertrend, ADX, SMA_ENVELOPE).
    - [`src/engine/condition_evaluator.py`](file:///Users/aswinkarthik.th/.gemini/antigravity-ide/scratch/quant-copilot/src/engine/condition_evaluator.py) (Anti-lookahead ConditionTree evaluator with shift(1) crossing logic).
    - [`src/engine/costs.py`](file:///Users/aswinkarthik.th/.gemini/antigravity-ide/scratch/quant-copilot/src/engine/costs.py) (Indian market STT, exchange fees, GST, SEBI, stamp duty, slippage).
-   - [`src/engine/backtester.py`](file:///Users/aswinkarthik.th/.gemini/antigravity-ide/scratch/quant-copilot/src/engine/backtester.py) & [`src/schema/backtest_models.py`](file:///Users/aswinkarthik.th/.gemini/antigravity-ide/scratch/quant-copilot/src/schema/backtest_models.py) (Bar-by-bar execution loop, intraday/positional lifecycle, circuit breakers).
+   - [`src/engine/backtester.py`](file:///Users/aswinkarthik.th/.gemini/antigravity-ide/scratch/quant-copilot/src/engine/backtester.py) & [`src/schema/backtest_models.py`](file:///Users/aswinkarthik.th/.gemini/antigravity-ide/scratch/quant-copilot/src/schema/backtest_models.py) (Bar-by-bar execution loop, intraday/positional lifecycle, circuit breakers, post-loss re-entry cooldown).
    - [`src/engine/metrics.py`](file:///Users/aswinkarthik.th/.gemini/antigravity-ide/scratch/quant-copilot/src/engine/metrics.py) (CAGR, Sharpe, Sortino, Calmar, Max Drawdown, Win Rate, Expectancy).
-   - Benchmark Implementation & Validation: [`src/strategies/nestle_200_sma.py`](file:///Users/aswinkarthik.th/.gemini/antigravity-ide/scratch/quant-copilot/src/strategies/nestle_200_sma.py) & [`tests/test_benchmark_nestle.py`](file:///Users/aswinkarthik.th/.gemini/antigravity-ide/scratch/quant-copilot/tests/test_benchmark_nestle.py) (Full 57/57 total test suite passing).
-   - Runners & Analyzers: [`scripts/run_nestle_angel_backtest.py`](file:///Users/aswinkarthik.th/.gemini/antigravity-ide/scratch/quant-copilot/scripts/run_nestle_angel_backtest.py), [`scripts/run_nestle_5yr_angel_backtest.py`](file:///Users/aswinkarthik.th/.gemini/antigravity-ide/scratch/quant-copilot/scripts/run_nestle_5yr_angel_backtest.py), [`scripts/add_backtest_to_excel.py`](file:///Users/aswinkarthik.th/.gemini/antigravity-ide/scratch/quant-copilot/scripts/add_backtest_to_excel.py) (exports year-wise metrics & 493-trade log to Excel).
+   - Benchmark Implementation & Validation: [`src/strategies/nestle_200_sma.py`](file:///Users/aswinkarthik.th/.gemini/antigravity-ide/scratch/quant-copilot/src/strategies/nestle_200_sma.py), [`src/strategies/nestle_200_sma_enhanced.py`](file:///Users/aswinkarthik.th/.gemini/antigravity-ide/scratch/quant-copilot/src/strategies/nestle_200_sma_enhanced.py) & [`tests/test_benchmark_nestle.py`](file:///Users/aswinkarthik.th/.gemini/antigravity-ide/scratch/quant-copilot/tests/test_benchmark_nestle.py).
+   - Head-to-Head Benchmark Runner: [`scripts/run_enhanced_comparison.py`](file:///Users/aswinkarthik.th/.gemini/antigravity-ide/scratch/quant-copilot/scripts/run_enhanced_comparison.py) demonstrating +₹12.13L turnaround from negative to positive alpha across NESTLEIND, HINDUNILVR, and ALKEM (129/129 tests passing).
 4. **Step 2C: Smart Incremental Master Cache & Extended Backtests** (✅ COMPLETE)
    - [`src/engine/smart_cache.py`](file:///Users/aswinkarthik.th/.gemini/antigravity-ide/scratch/quant-copilot/src/engine/smart_cache.py): Range-aware smart cache manager (`SmartCacheManager`).
    - Lightning-fast (<2ms) time range inspection using PyArrow column projection without reading entire datasets.

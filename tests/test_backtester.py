@@ -165,3 +165,40 @@ def test_backtester_positional_holds_overnight():
     # Final trade closed at END_OF_BACKTEST on day 2
     assert result.trades[-1].exit_reason == "END_OF_BACKTEST"
     assert result.trades[-1].exit_time == dates[-1]
+
+
+def test_backtester_cooldown_after_loss():
+    # Build strategy with cooldown of 3 bars after loss
+    strategy = build_sma_strategy(execution_style=ExecutionStyle.POSITIONAL, max_trades=10)
+    strategy.deployment_settings.cooldown_bars_after_loss = 3
+
+    dates = pd.date_range("2024-01-01 09:15", periods=10, freq="15min")
+    # bar 0: 100, bar 1: 95
+    # bar 2: 105 (BUY)
+    # bar 3: 90 (SELL at LOSS)
+    # bar 4: 105 (Condition fires, but in cooldown! Should be blocked)
+    # bar 5: 110 (In cooldown! Blocked)
+    # bar 6: 115 (In cooldown! Blocked)
+    # bar 7: 120 (Cooldown expired! Allowed to enter)
+    df = pd.DataFrame(
+        {
+            "open": [100.0, 95.0, 105.0, 90.0, 105.0, 110.0, 115.0, 120.0, 125.0, 130.0],
+            "high": [102.0, 96.0, 106.0, 91.0, 106.0, 111.0, 116.0, 121.0, 126.0, 131.0],
+            "low": [98.0, 94.0, 104.0, 89.0, 104.0, 109.0, 114.0, 119.0, 124.0, 129.0],
+            "close": [100.0, 95.0, 105.0, 90.0, 105.0, 110.0, 115.0, 120.0, 125.0, 130.0],
+            "volume": [1000] * 10,
+        },
+        index=dates,
+    )
+    bt = Backtester(strategy=strategy, lot_size=1)
+    result = bt.run(df)
+
+    # First trade entered at bar 2, exited at loss at bar 3
+    assert len(result.trades) >= 1
+    t1 = result.trades[0]
+    assert t1.pnl_net < 0
+
+    # Next trade should only enter at or after bar 7
+    if len(result.trades) > 1:
+        t2 = result.trades[1]
+        assert t2.entry_time >= dates[7]
