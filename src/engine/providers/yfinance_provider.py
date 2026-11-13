@@ -1,8 +1,19 @@
+"""Yahoo Finance Data Provider Module.
+
+Provides offline and development market data access by wrapping the yfinance
+library, mapping Indian exchange symbols (NSE/BSE/Indices) to Yahoo Finance
+ticker format, and executing resilient candle downloads with exponential back-off retries.
+"""
+
+import logging
+import time
 from typing import Dict, Optional
 import pandas as pd
 import yfinance as yf
 
 from src.engine.data_feed import BaseDataProvider, DataProviderError
+
+logger = logging.getLogger(__name__)
 
 
 class YFinanceProvider(BaseDataProvider):
@@ -54,7 +65,7 @@ class YFinanceProvider(BaseDataProvider):
         start_date: str = "2024-01-01",
         end_date: str = "2024-12-31",
     ) -> pd.DataFrame:
-        """Fetch historical candles via yfinance."""
+        """Fetch historical candles via yfinance with retry loop and exponential back-off."""
         yf_ticker = self._resolve_ticker(symbol, exchange)
         yf_interval = self.INTERVAL_MAP.get(interval, interval)
 
@@ -64,13 +75,27 @@ class YFinanceProvider(BaseDataProvider):
         except Exception:
             yf_end = end_date
 
-        try:
-            ticker = yf.Ticker(yf_ticker)
-            df = ticker.history(start=start_date, end=yf_end, interval=yf_interval)
-        except Exception as e:
-            raise DataProviderError(f"Failed to fetch data from yfinance for '{yf_ticker}': {e}") from e
+        df = None
+        last_err = None
+        for attempt in range(3):
+            try:
+                ticker = yf.Ticker(yf_ticker)
+                df = ticker.history(start=start_date, end=yf_end, interval=yf_interval)
+                if df is not None and not df.empty:
+                    break
+            except Exception as e:
+                last_err = e
+                logger.warning(
+                    "Attempt %d/3 failed to fetch data from yfinance for '%s': %s",
+                    attempt + 1,
+                    yf_ticker,
+                    e,
+                )
+                time.sleep(0.5 * (2 ** attempt))
 
-        if df.empty:
+        if df is None or df.empty:
+            if last_err:
+                raise DataProviderError(f"Failed to fetch data from yfinance for '{yf_ticker}': {last_err}") from last_err
             raise DataProviderError(
                 f"yfinance returned 0 candles for '{yf_ticker}' ({start_date} to {end_date}, interval={yf_interval})"
             )

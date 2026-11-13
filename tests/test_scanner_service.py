@@ -345,3 +345,43 @@ def test_add_and_remove_watchlist_via_service(tmp_path: Path):
     assert len(service.tracker.get_watchlist()) == 0
     assert service.remove_from_watchlist("THERMAX") is False
 
+
+def test_symbol_whitelist_validation(temp_service: ScannerService):
+    """Verify whitelist regex rejects invalid symbols (e.g. punctuation, symbols, whitespace)."""
+    assert temp_service.add_to_watchlist("INVALID$") is None
+    assert temp_service.add_to_watchlist("AAPL.NS;DROP TABLE") is None
+    assert temp_service.add_to_watchlist("") is None
+    assert temp_service.add_to_watchlist("TOOLONGTICKERNAMEEXCEEDINGLIMIT") is None
+
+
+def test_offline_mode_skips_price_fetch_and_renders_na(tmp_path: Path):
+    """Verify --offline mode (current_prices={}) skips price auto-fetch and renders 'price N/A'."""
+    cache_d = tmp_path / "cache"
+    data_d = tmp_path / "data"
+    cache_d.mkdir()
+    data_d.mkdir()
+
+    service = ScannerService(
+        cache_dir=str(cache_d),
+        data_dir=str(data_d),
+        cache_manager=MockCacheManager(),
+        screener_client=MockScreener(),
+        insider_feed=MockInsider(),
+    )
+
+    # Record buy to create an active holding
+    service.record_buy("PIIND", entry_price=1750.0, quantity=10, entry_date="2026-11-10")
+
+    # 1. Calling get_portfolio_summary with current_prices={}
+    stocks, summary_md = service.get_portfolio_summary(current_prices={})
+    assert len(stocks) == 1
+    assert "Current: price N/A" in summary_md
+
+    # 2. Calling get_daily_briefing with current_prices={}
+    dashboard = service.get_daily_briefing(candidate_symbols=[], current_prices={})
+    assert any("Offline mode" in s for s in dashboard.summary_notes)
+
+    briefing_md = service.format_daily_briefing_markdown(dashboard)
+    assert "price N/A" in briefing_md
+
+

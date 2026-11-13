@@ -2,6 +2,7 @@
 
 import json
 from datetime import datetime, timedelta
+from pathlib import Path
 import numpy as np
 import pandas as pd
 import pytest
@@ -326,4 +327,100 @@ def test_check_watchlist():
     
     assert updated[1].symbol == "STOCK_B"
     assert updated[1].is_buy_triggered is False
+
+
+# -------------------------------------------------------------------------
+# NEW UNIT TESTS: FAILURE MODES, CACHE TTL & TIMESTAMP MANIPULATION
+# -------------------------------------------------------------------------
+
+@pytest.mark.parametrize("status_code,payload", [
+    (404, {}),
+    (429, {}),
+    (200, {}),
+    (200, {"data": []}),
+    (500, {}),
+])
+def test_fetch_nse_52w_low_failure_modes_and_fallback(tmp_path: Path, monkeypatch, status_code: int, payload: dict):
+    """Simulate HTTP failure modes (404, 429, empty payload, 500) and verify cache fallback."""
+    cache_d = tmp_path / "cache"
+    cache_d.mkdir()
+    cache_file = cache_d / "nse_52w_low_symbols.json"
+    
+    # Pre-populate cache file with known fallback symbols
+    with open(cache_file, "w", encoding="utf-8") as f:
+        json.dump(["AIAENG", "NESTLEIND"], f)
+
+    class MockResponse:
+        def __init__(self, sc: int, data: dict):
+            self.status_code = sc
+            self._data = data
+
+        def json(self):
+            return self._data
+
+    class MockSession:
+        def __init__(self):
+            self.headers = {}
+
+        def get(self, url, **kwargs):
+            return MockResponse(status_code, payload)
+
+    monkeypatch.setattr("requests.Session", MockSession)
+
+    scanner = LowCapitulationScanner(cache_dir=str(cache_d))
+    symbols = scanner.fetch_nse_52w_low_symbols(force_refresh=True)
+
+    # Must return a list, and must include the fallback cached items or quality universe
+    assert isinstance(symbols, list)
+    assert "AIAENG" in symbols or "NESTLEIND" in symbols
+
+
+def test_fetch_nse_52w_low_cache_ttl_and_timestamp_manipulation(tmp_path: Path, monkeypatch):
+    """Manipulate cache file mtime and assert new fetch occurs when expired vs hit when fresh."""
+    import os
+    import time
+    from src.scanner.low_scanner import NSE_CACHE_TTL
+
+    cache_d = tmp_path / "cache"
+    cache_d.mkdir()
+    cache_file = cache_d / "nse_52w_low_symbols.json"
+
+    with open(cache_file, "w", encoding="utf-8") as f:
+        json.dump(["OLD_SYMBOL"], f)
+
+    fetch_called = {"count": 0}
+
+    class MockResponse:
+        def __init__(self):
+            self.status_code = 200
+
+        def json(self):
+            fetch_called["count"] += 1
+            return {"data": [{"symbol": "NEW_SYMBOL"}]}
+
+    class MockSession:
+        def __init__(self):
+            self.headers = {}
+
+        def get(self, url, **kwargs):
+            return MockResponse()
+
+    monkeypatch.setattr("requests.Session", MockSession)
+
+    scanner = LowCapitulationScanner(cache_dir=str(cache_d))
+
+    # 1. Fresh cache: mtime is current, no fetch should occur
+    res1 = scanner.fetch_nse_52w_low_symbols(force_refresh=False)
+    assert res1 == ["OLD_SYMBOL"]
+    assert fetch_called["count"] == 0
+
+    # 2. Manipulate timestamp to be older than NSE_CACHE_TTL
+    expired_time = time.time() - (NSE_CACHE_TTL + 300)
+    os.utime(cache_file, (expired_time, expired_time))
+
+    # 3. Cache is now expired, assert a new fetch occurs
+    res2 = scanner.fetch_nse_52w_low_symbols(force_refresh=False)
+    assert fetch_called["count"] >= 1
+    assert "NEW_SYMBOL" in res2
+
 

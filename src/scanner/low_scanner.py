@@ -10,6 +10,7 @@ Implements the 3-Step Institutional Funnel:
 import json
 import logging
 import os
+import random
 import time
 from datetime import datetime, timezone
 from pathlib import Path
@@ -29,6 +30,18 @@ from src.scanner.screener_client import ScreenerClient
 from src.scanner.insider_feed import InsiderFeed
 
 logger = logging.getLogger(__name__)
+
+# Constants for discovery, caching, and technical rules
+NSE_CACHE_TTL: int = 7200  # 2 hours in seconds
+CAPITULATION_TOLERANCE: float = 0.005  # 0.5% tolerance near 52W low
+VOLUME_ANOMALY_FACTOR: float = 3.0  # 3.0x 20-day SMA volume surge
+
+_RANDOM_UAS: List[str] = [
+    "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36",
+    "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36",
+    "Mozilla/5.0 (Macintosh; Intel Mac OS X 10.15; rv:123.0) Gecko/20100101 Firefox/123.0",
+]
 
 
 class LowCapitulationScanner:
@@ -82,7 +95,7 @@ class LowCapitulationScanner:
     def fetch_nse_52w_low_symbols(self, force_refresh: bool = False) -> List[str]:
         """Fetch list of symbols currently at or near 52-week low directly from NSE.
         
-        Cached locally for 2 hours to avoid hammering NSE endpoints.
+        Cached locally for NSE_CACHE_TTL seconds to avoid hammering NSE endpoints.
         Combines NSE live API output with local quality universe (Nifty 500)
         to prevent missing institutional stocks that drift into 52W lows without
         being top daily percentage losers.
@@ -93,18 +106,22 @@ class LowCapitulationScanner:
         if not force_refresh and cache_file.exists():
             try:
                 mtime = os.path.getmtime(cache_file)
-                if (now - mtime) < 7200:  # 2 hours
+                if (now - mtime) < NSE_CACHE_TTL:
                     with open(cache_file, "r", encoding="utf-8") as f:
-                        return json.load(f)
+                        cached_data = json.load(f)
+                        if isinstance(cached_data, list):
+                            return cached_data
             except Exception as e:
                 logger.warning(f"Failed to read 52W low cache: {e}")
 
-        symbols: List[str] = []
+        symbols_set: set[str] = set()
+        ua = random.choice(_RANDOM_UAS) if _RANDOM_UAS else self.DEFAULT_USER_AGENT
+
         try:
             s = requests.Session()
             s.headers.update(
                 {
-                    "User-Agent": self.DEFAULT_USER_AGENT,
+                    "User-Agent": ua,
                     "Accept": "*/*",
                     "Referer": "https://www.nseindia.com/market-data/52-week-high-low",
                 }
@@ -116,7 +133,15 @@ class LowCapitulationScanner:
                 pass
 
             resp = s.get(self.NSE_52W_LOW_URL, timeout=10)
-            if resp.status_code == 200:
+            if resp.status_code in (404, 429):
+                logger.warning(f"NSE 52W Low API returned {resp.status_code}; falling back immediately to cache.")
+                if cache_file.exists():
+                    try:
+                        with open(cache_file, "r", encoding="utf-8") as f:
+                            return json.load(f)
+                    except Exception as e:
+                        logger.warning(f"Error reading cache on {resp.status_code} fallback: {e}")
+            elif resp.status_code == 200:
                 data = resp.json()
                 raw_list = []
                 if isinstance(data, dict):
@@ -130,15 +155,21 @@ class LowCapitulationScanner:
                 for item in raw_list:
                     if isinstance(item, dict):
                         sym = item.get("symbol") or item.get("symbolName")
-                        if sym and sym not in symbols:
-                            symbols.append(sym.strip().upper())
+                        if sym:
+                            symbols_set.add(sym.strip().upper())
             else:
                 logger.warning(f"NSE 52W Low API status: {resp.status_code}")
 
             # If empty, fallback to live analysis losers near 52-week low
-            if not symbols:
+            if not symbols_set:
                 r_loosers = s.get("https://www.nseindia.com/api/live-analysis-variations?index=loosers", timeout=10)
-                if r_loosers.status_code == 200:
+                if r_loosers.status_code in (404, 429) and cache_file.exists():
+                    try:
+                        with open(cache_file, "r", encoding="utf-8") as f:
+                            return json.load(f)
+                    except Exception:
+                        pass
+                elif r_loosers.status_code == 200:
                     d_loosers = r_loosers.json()
                     if isinstance(d_loosers, dict):
                         for sec in ["allSec", "FOSec", "NIFTY", "NIFTYNEXT50"]:
@@ -149,27 +180,33 @@ class LowCapitulationScanner:
                                         sym = it.get("symbol")
                                         near_wkl = it.get("nearWKL", -999)
                                         # Within 15% of 52W low
-                                        if sym and near_wkl > -15.0 and sym not in symbols:
-                                            symbols.append(sym.strip().upper())
+                                        if sym and near_wkl > -15.0:
+                                            symbols_set.add(sym.strip().upper())
         except Exception as e:
             logger.warning(f"NSE 52W Low API fetch failed: {e}")
 
         # Fallback / Supplement with local Quality Universe (Nifty 500)
         quality_symbols = self.load_quality_universe_symbols()
         for q_sym in quality_symbols:
-            if q_sym not in symbols:
-                symbols.append(q_sym)
+            symbols_set.add(q_sym.strip().upper())
 
         # Fallback to cached data if exists and still empty
-        if not symbols and cache_file.exists():
-            with open(cache_file, "r", encoding="utf-8") as f:
-                return json.load(f)
+        if not symbols_set and cache_file.exists():
+            try:
+                with open(cache_file, "r", encoding="utf-8") as f:
+                    return json.load(f)
+            except Exception as e:
+                logger.warning(f"Failed fallback cache read: {e}")
 
-        if symbols:
-            with open(cache_file, "w", encoding="utf-8") as f:
-                json.dump(symbols, f, indent=2)
+        sorted_symbols = sorted(symbols_set)
+        if sorted_symbols:
+            try:
+                with open(cache_file, "w", encoding="utf-8") as f:
+                    json.dump(sorted_symbols, f, indent=2)
+            except Exception as e:
+                logger.warning(f"Failed to write 52W low cache: {e}")
 
-        return symbols
+        return sorted_symbols
 
     # -------------------------------------------------------------------------
     # STEP 2 & 3: TECHNICAL COMPUTATION & LEVEL CALCULATION
@@ -180,6 +217,10 @@ class LowCapitulationScanner:
         """Compute rolling 52W low, 20-day volume SMA, EMAs, and capitulation levels.
         
         Requires a DataFrame with 'open', 'high', 'low', 'close', 'volume'.
+
+        Raises:
+            ValueError: If df is empty or contains fewer than 20 daily bars required
+                to compute the 20-day volume baseline and moving averages.
         """
         if df.empty or len(df) < 20:
             raise ValueError(f"Insufficient candle history ({len(df)} bars, need >= 20)")
@@ -280,24 +321,31 @@ class LowCapitulationScanner:
                 return None
 
         # 2. Technical Metrics
-        tech = self.calculate_technical_levels(df)
+        try:
+            tech = self.calculate_technical_levels(df)
+        except ValueError as e:
+            logger.debug("Insufficient history for %s: %s", clean_sym, e)
+            return None
 
-        # 3. Technical Rule 1: Fresh 52-Week Low (within 0.5% tolerance)
+        # 3. Technical Rule 1: Fresh 52-Week Low (within CAPITULATION_TOLERANCE)
         today_low = tech["today_low"]
         low_52w = tech["low_52w"]
         min_low_5d = tech.get("min_low_5d", today_low)
-        # Holds if today's low is at 52W low, or if 52W low was printed in last 5 days and today is testing within 1.5%
-        is_52w_low = (today_low <= (low_52w * 1.005)) or (min_low_5d <= (low_52w * 1.005) and today_low <= (min_low_5d * 1.015))
+        # Holds if today's low is at 52W low, or if 52W low was printed in last 5 days and today is testing within tolerance
+        is_52w_low = (today_low <= (low_52w * (1.0 + CAPITULATION_TOLERANCE))) or (
+            min_low_5d <= (low_52w * (1.0 + CAPITULATION_TOLERANCE))
+            and today_low <= (min_low_5d * (1.0 + 3 * CAPITULATION_TOLERANCE))
+        )
 
         if not is_52w_low:
             return None
 
-        # 4. Technical Rule 2: Institutional Volume Anomaly (>= 3.0x 20-day SMA)
-        # Accepts either today's anomaly OR a primary climax (>= 3.0x) within the last 5 trading days
+        # 4. Technical Rule 2: Institutional Volume Anomaly (>= VOLUME_ANOMALY_FACTOR x 20-day SMA)
+        # Accepts either today's anomaly OR a primary climax (>= VOLUME_ANOMALY_FACTOR) within the last 5 trading days
         vol_ratio = tech["volume_ratio"]
         max_vol_ratio_5d = tech.get("max_vol_ratio_5d", vol_ratio)
 
-        if vol_ratio < 3.0 and max_vol_ratio_5d < 3.0:
+        if vol_ratio < VOLUME_ANOMALY_FACTOR and max_vol_ratio_5d < VOLUME_ANOMALY_FACTOR:
             return None
 
         # Effective volume anomaly for display
@@ -398,6 +446,15 @@ class LowCapitulationScanner:
         - INVALIDATED: follow_through close < capitulation_low (support violated)
         - CONFIRMED_BUY: follow_through close > capitulation_high OR follow_through close > ema5
         - RADAR: Still consolidating within range above capitulation_low
+
+        Args:
+            capitulation_low: Capitulation bar low serving as the soft stop-loss baseline.
+            capitulation_high: Capitulation bar high serving as the primary breakout pivot.
+            follow_through_bar: pd.Series representing the follow-through daily OHLCV bar.
+            ema5: Optional float representing the 5-day Exponential Moving Average (EMA5),
+                used as an alternative dynamic 'break-through' reversal trigger for Stage 2
+                confirmation when price reclaims the 5 EMA even before clearing the
+                capitulation candle's absolute high.
         
         Returns:
             Tuple of (SignalStage, confirmation_price or None)

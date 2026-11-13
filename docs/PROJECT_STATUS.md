@@ -123,10 +123,27 @@ We execute Phase 1 in clear, self-contained chunks:
     - Tests: [`tests/test_tracker.py`](file:///Users/aswinkarthik.th/.gemini/antigravity-ide/scratch/quant-copilot/tests/test_tracker.py) (5/5 tests passing; 86/86 total project suite passing).
   - **Phase D: Conversational Trigger ('Whats today for 52') & CLI Runner** (✅ COMPLETE)
     - [`src/scanner/service.py`](file:///Users/aswinkarthik.th/.gemini/antigravity-ide/scratch/quant-copilot/src/scanner/service.py): `ScannerService` unified facade tying together technical scanner, fundamental auditor, insider feed, portfolio tracker, fast lightweight queries (`portfolio`, `watchlist`), and Markdown executive briefing formatting.
-    - [`scripts/run_52_scanner.py`](file:///Users/aswinkarthik.th/.gemini/antigravity-ide/scratch/quant-copilot/scripts/run_52_scanner.py): Modular CLI runner supporting `daily`, `portfolio`, `watchlist`, `audit`, `buy`, and `sell` subcommands.
-    - Tests: [`tests/test_scanner_service.py`](file:///Users/aswinkarthik.th/.gemini/antigravity-ide/scratch/quant-copilot/tests/test_scanner_service.py) (5/5 tests passing; 91/91 total project suite passing).
+    - [`scripts/run_52_scanner.py`](file:///Users/aswinkarthik.th/.gemini/antigravity-ide/scratch/quant-copilot/scripts/run_52_scanner.py): Modular CLI runner supporting `daily`, `portfolio`, `watchlist`, `audit`, `buy`, and `sell` subcommands with `--offline` / `--skip-prices` support.
+    - Hardened with top-level try/except logging, symbol whitelist regex, cache TTL constants, random User-Agent fallback, and 404/429 fallback.
+    - Tests: [`tests/test_scanner_service.py`](file:///Users/aswinkarthik.th/.gemini/antigravity-ide/scratch/quant-copilot/tests/test_scanner_service.py) & [`tests/test_52_low_scanner.py`](file:///Users/aswinkarthik.th/.gemini/antigravity-ide/scratch/quant-copilot/tests/test_52_low_scanner.py) (Full test suite: 103/103 tests passing).
 
-### 2. 52-Week High Dual-Mode Strategy ([`docs/STRATEGY_52_WEEK_HIGH.md`](file:///Users/aswinkarthik.th/.gemini/antigravity-ide/scratch/quant-copilot/docs/STRATEGY_52_WEEK_HIGH.md))
+### 2. Public API Reference (`ScannerService`)
+
+| Method | Signature | Description |
+| :--- | :--- | :--- |
+| `get_daily_briefing` | `(candidate_symbols=None, as_of_date=None, skip_fundamental_audit=False, current_prices=None) -> DailyDashboard52` | End-to-end evening executive dashboard (discovery, watchlist triggers, portfolio sentinels, insider trades). |
+| `format_daily_briefing_markdown` | `(dashboard: DailyDashboard52) -> str` | Formats the briefing payload into an executive Markdown report. |
+| `scan_radar_candidates` | `(candidate_symbols=None, as_of_date=None) -> Tuple[List[CapitulationSignal], str]` | Focused discovery & audit of 52W-low capitulation candidates without altering portfolio state. |
+| `get_portfolio_summary` | `(current_prices=None, as_of_date=None) -> Tuple[List[PortfolioStock], str]` | Fast check of active Tier 2 holdings, soft stop-loss buffers, and PnL badges. |
+| `get_watchlist_summary` | `(as_of_date=None) -> Tuple[List[WatchlistStock], str]` | Reviews Tier 1 watchlist and evaluates Stage 2 confirmation triggers against latest price bars. |
+| `audit_single_symbol` | `(symbol: str, df=None) -> Dict[str, Any]` | Deep dive on a single ticker: fundamentals, insider activity, and technical levels. |
+| `record_buy` | `(symbol, entry_price, quantity, entry_date=None, notes=None) -> PortfolioStock` | Records order execution into Tier 2 Active Portfolio. |
+| `record_sell` | `(symbol, sell_price, quantity, reason, sell_date=None, notes=None) -> Tuple[PortfolioStock, Optional[ClosedTradeLedger]]` | Records partial or full exit and archives completed trades to Tier 3 Ledger. |
+
+> **Note on Internal Helpers**:  
+> Convenience methods such as `add_to_watchlist` and `remove_from_watchlist` are internal helper proxies to `PortfolioTracker`. They facilitate interactive CLI execution and scripting, but are **not** part of the published Model Context Protocol (MCP) tool contract.
+
+### 3. 52-Week High Dual-Mode Strategy ([`docs/STRATEGY_52_WEEK_HIGH.md`](file:///Users/aswinkarthik.th/.gemini/antigravity-ide/scratch/quant-copilot/docs/STRATEGY_52_WEEK_HIGH.md))
 - **Concept**: Dual-mode engine distinguishing clean continuation breakouts (close at high on base) from buying climaxes / distribution tops (long upper rejection wick on parabolic run for shorting or full exit).
 - **Progress Status**: ⏳ Roadmapped (Scheduled after completion of 52-Week Low strategy).
 

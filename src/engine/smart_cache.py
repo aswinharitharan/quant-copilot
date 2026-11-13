@@ -73,9 +73,14 @@ class SmartCacheManager:
     def get_master_cache_path(
         self, symbol: str, exchange: str = "NSE", interval: str = "15m"
     ) -> Path:
-        """Return the canonical master parquet path for an instrument."""
-        safe_symbol = symbol.replace("/", "_").replace(":", "_").replace("^", "")
-        return self.cache_dir / f"{safe_symbol}_{exchange}_{interval}.parquet"
+        """Return the canonical master parquet path for an instrument.
+        
+        Normalizes symbol (upper & stripped) before building cache key.
+        """
+        clean_symbol = symbol.upper().strip().replace("/", "_").replace(":", "_").replace("^", "")
+        clean_exchange = exchange.upper().strip()
+        clean_interval = interval.strip()
+        return self.cache_dir / f"{clean_symbol}_{clean_exchange}_{clean_interval}.parquet"
 
     # -------------------------------------------------------------------------
     # 2. FAST RANGE INSPECTION

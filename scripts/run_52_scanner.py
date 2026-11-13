@@ -24,6 +24,15 @@ from src.scanner.service import ScannerService
 
 
 def main():
+    common_opts = argparse.ArgumentParser(add_help=False)
+    common_opts.add_argument(
+        "--offline",
+        "--skip-prices",
+        dest="offline",
+        action="store_true",
+        help="Skip live price auto-fetch from data providers and render 'price N/A'",
+    )
+
     parser = argparse.ArgumentParser(
         description="QuantCopilot: 52-Week Low Strategy CLI & Dispatcher",
         formatter_class=argparse.RawDescriptionHelpFormatter,
@@ -31,21 +40,37 @@ def main():
     subparsers = parser.add_subparsers(dest="command", required=True)
 
     # 1. Daily Briefing
-    p_daily = subparsers.add_parser("daily", help="Run full daily evening briefing ('Whats today for 52')")
+    p_daily = subparsers.add_parser(
+        "daily",
+        parents=[common_opts],
+        help="Run full daily evening briefing ('Whats today for 52')",
+    )
     p_daily.add_argument("--symbols", nargs="*", help="Optional specific list of candidate symbols to scan")
     p_daily.add_argument("--date", help="Optional as-of date (YYYY-MM-DD)")
 
     # 1b. Radar Scan (Only Discovery + Filter + Audit)
-    p_radar = subparsers.add_parser("radar", help="Scan, filter and audit 52-week low stocks without checking portfolio")
+    p_radar = subparsers.add_parser(
+        "radar",
+        parents=[common_opts],
+        help="Scan, filter and audit 52-week low stocks without checking portfolio",
+    )
     p_radar.add_argument("--symbols", nargs="*", help="Optional specific candidate symbols to filter and audit")
     p_radar.add_argument("--date", help="Optional as-of date (YYYY-MM-DD)")
 
     # 2. Portfolio Health
-    p_port = subparsers.add_parser("portfolio", help="Quick view of Tier 2 active portfolio & soft stop badges")
+    p_port = subparsers.add_parser(
+        "portfolio",
+        parents=[common_opts],
+        help="Quick view of Tier 2 active portfolio & soft stop badges",
+    )
     p_port.add_argument("--date", help="Optional as-of date (YYYY-MM-DD)")
 
     # 3. Watchlist
-    p_watch = subparsers.add_parser("watchlist", help="Quick view of Tier 1 watchlist & Stage 2 buy triggers")
+    p_watch = subparsers.add_parser(
+        "watchlist",
+        parents=[common_opts],
+        help="Quick view of Tier 1 watchlist & Stage 2 buy triggers",
+    )
     p_watch.add_argument("--date", help="Optional as-of date (YYYY-MM-DD)")
 
     # 4. Audit
@@ -78,9 +103,11 @@ def main():
 
     if args.command == "daily":
         print("🔍 Running 52-Week Low Daily Funnel Scan...")
+        current_prices = {} if getattr(args, "offline", False) else None
         dashboard = service.get_daily_briefing(
             candidate_symbols=args.symbols,
             as_of_date=args.date,
+            current_prices=current_prices,
         )
         md = service.format_daily_briefing_markdown(dashboard)
         print("\n" + md)
@@ -94,7 +121,8 @@ def main():
         print("\n" + summary)
 
     elif args.command == "portfolio":
-        _, summary = service.get_portfolio_summary(as_of_date=args.date)
+        current_prices = {} if getattr(args, "offline", False) else None
+        _, summary = service.get_portfolio_summary(current_prices=current_prices, as_of_date=args.date)
         print("\n" + summary)
 
     elif args.command == "watchlist":
