@@ -74,8 +74,14 @@ class ScreenerClient:
 
         raise ConnectionError(f"Failed to fetch Screener.in data for {clean_sym}: {last_err}")
 
-    def parse_html(self, symbol: str, html: str) -> FundamentalAudit:
-        """Parse HTML string from Screener.in and construct FundamentalAudit."""
+    def parse_html(self, symbol: str, html: str, audit_mode: str = "solvency") -> FundamentalAudit:
+        """Parse HTML string from Screener.in and construct FundamentalAudit.
+        
+        Args:
+            symbol: Ticker symbol.
+            html: Raw HTML content.
+            audit_mode: 'solvency' (52W Low, default) or 'growth' (52W High).
+        """
         soup = BeautifulSoup(html, "html.parser")
         audit_date = datetime.now(timezone.utc).strftime("%Y-%m-%d")
 
@@ -117,9 +123,11 @@ class ScreenerClient:
         else:
             debt_to_equity = 999.0 if borrowings > 0 else 0.0
 
-        # 3. P&L: Operating Profit, Interest
+        # 3. P&L: Operating Profit, Interest, Sales Growth, Net Profit Growth
         op_profit = 0.0
         interest = 0.0
+        sales_growth: Optional[float] = None
+        profit_growth: Optional[float] = None
         pl = soup.select_one("#profit-loss")
         if pl:
             for tr in pl.select("tr"):
@@ -131,6 +139,16 @@ class ScreenerClient:
                         op_profit = last_val
                     elif "interest" in name:
                         interest = last_val
+                    elif "sales" in name or "revenue" in name:
+                        if len(cells) >= 3:
+                            prev_val = self._clean_num(cells[-2])
+                            if prev_val is not None and prev_val > 0 and last_val is not None:
+                                sales_growth = round(((last_val - prev_val) / prev_val) * 100, 1)
+                    elif "net profit" in name:
+                        if len(cells) >= 3:
+                            prev_val = self._clean_num(cells[-2])
+                            if prev_val is not None and prev_val > 0 and last_val is not None:
+                                profit_growth = round(((last_val - prev_val) / prev_val) * 100, 1)
 
         if interest > 0:
             int_coverage = round(op_profit / interest, 2)
@@ -177,12 +195,16 @@ class ScreenerClient:
             cfo_last_yr_cr=cfo,
             promoter_holding_pct=promoter_holding,
             promoter_pledge_pct=pledge_pct,
+            sales_growth_yoy_pct=sales_growth,
+            profit_growth_yoy_pct=profit_growth,
         )
 
+        if audit_mode == "growth":
+            return self.evaluate_growth_rules(raw_audit)
         return self.evaluate_rules(raw_audit)
 
     def evaluate_rules(self, audit: FundamentalAudit) -> FundamentalAudit:
-        """Apply the 5 Golden Solvency & Quality rules."""
+        """Apply the 5 Golden Solvency & Quality rules for 52-Week Low."""
         failures: List[str] = []
 
         # Rule 1: Promoter Pledge == 0%
@@ -212,6 +234,53 @@ class ScreenerClient:
         audit.passed_audit = len(failures) == 0
         audit.failure_reasons = failures
         return audit
+
+    def evaluate_growth_rules(self, audit: FundamentalAudit) -> FundamentalAudit:
+        """Apply the 6 Golden Growth & Quality rules for 52-Week High Breakouts:
+        1. Sales Growth YoY >= 10% (if present; warning if not)
+        2. Profit Growth YoY >= 12% (if present; warning if not)
+        3. ROCE >= 12%
+        4. Debt to Equity < 1.0 (growth companies can support moderate leverage)
+        5. Promoter Holding >= 40%
+        6. Promoter Pledge < 15% (comfortably below distress threshold)
+        """
+        failures: List[str] = []
+
+        # Rule 1: Revenue / Sales Growth >= 10%
+        if audit.sales_growth_yoy_pct is not None and audit.sales_growth_yoy_pct < 10.0:
+            failures.append(f"Revenue Growth is {audit.sales_growth_yoy_pct:.1f}% (Must be >= 10.0%)")
+
+        # Rule 2: Net Profit Growth >= 12%
+        if audit.profit_growth_yoy_pct is not None and audit.profit_growth_yoy_pct < 12.0:
+            failures.append(f"Profit Growth is {audit.profit_growth_yoy_pct:.1f}% (Must be >= 12.0%)")
+
+        # Rule 3: ROCE >= 12%
+        if audit.roce_pct is not None and audit.roce_pct < 12.0:
+            failures.append(f"ROCE is {audit.roce_pct:.1f}% (Must be >= 12.0%)")
+        elif audit.roce_pct is None:
+            failures.append("ROCE metric is missing")
+
+        # Rule 4: Debt to Equity < 1.0
+        if audit.debt_to_equity is not None and audit.debt_to_equity >= 1.0:
+            failures.append(f"Debt/Equity is {audit.debt_to_equity:.2f} (Must be < 1.0)")
+
+        # Rule 5: Promoter Holding >= 40%
+        if audit.promoter_holding_pct is not None and audit.promoter_holding_pct < 40.0:
+            failures.append(f"Promoter Holding is {audit.promoter_holding_pct:.1f}% (Must be >= 40.0%)")
+
+        # Rule 6: Promoter Pledge < 15%
+        if audit.promoter_pledge_pct is not None and audit.promoter_pledge_pct >= 15.0:
+            failures.append(f"Promoter Pledge is {audit.promoter_pledge_pct:.1f}% (Must be < 15.0%)")
+
+        audit.passed_audit = len(failures) == 0
+        audit.failure_reasons = failures
+        return audit
+
+    def audit_growth_company(self, symbol: str, force_refresh: bool = False) -> FundamentalAudit:
+        """Audit a company for 52-Week High growth & quality criteria."""
+        # Check raw audit first
+        raw = self.audit_company(symbol, force_refresh=force_refresh)
+        return self.evaluate_growth_rules(raw)
 
     def audit_company(self, symbol: str, force_refresh: bool = False) -> FundamentalAudit:
         """Audit a company with local cache support."""

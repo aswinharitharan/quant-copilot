@@ -1,70 +1,118 @@
-# 52-Week High Dual-Mode Strategy (Breakout vs. Exhaustion Climax)
+# 52-Week High Breakout Strategy (Institutional Breakout Accumulation - IBA)
 
-> **Status**: ⏳ Pending / Roadmapped (Scheduled after 52-Week Low implementation)  
-> **Target Market**: Indian Equities & F&O (NSE)  
-> **Strategy Type**: Momentum Continuation / Exhaustion Top Reversal  
+> **Status**: Production-Ready — **All Phases (A, B, C, D) Complete** (122/122 total project tests passing)  
+> **Target Market**: Indian Equities (NSE/BSE)  
+> **Strategy Type**: Institutional Momentum Continuation & Stage 2 Trend Riding  
 > **Authoring Lead**: QuantCopilot AI  
-> **Master Roadmap**: [PROJECT_STATUS.md](file:///Users/aswinkarthik.th/.gemini/antigravity-ide/scratch/quant-copilot/docs/PROJECT_STATUS.md)
+> **Master Roadmap**: [PROJECT_STATUS.md](file:///Users/aswinkarthik.th/.gemini/antigravity-ide/scratch/quant-copilot/docs/PROJECT_STATUS.md)  
+> **Analysis Reference**: [52_WEEK_HIGH_STRATEGY_ANALYSIS.md](file:///Users/aswinkarthik.th/.gemini/antigravity/brain/07406fe0-1f7a-4051-ae6c-e101bd3fab0a/52_WEEK_HIGH_STRATEGY_ANALYSIS.md)
 
 ---
 
-## 1. Dual-Mode Framework Overview
+## 1. Strategy Thesis & Academic Foundation
 
-Stocks hitting 52-week highs on abnormal volume are categorized by candle closure and market structure:
+The 52-week high effect is one of the most robust and persistent market anomalies in quantitative finance:
 
+* **George & Hwang (2004, *Journal of Finance*)**: Proximity to the 52-week high predicts future stock returns significantly better than past returns. Stocks near their 52-week highs earn systematic alpha (+0.45%/month) over stocks near their lows.
+* **Psychological Anchoring**: Retail traders anchor to the round-number 52W high and believe the stock is "too expensive" to buy, causing an **underreaction** to new highs. Institutions use structural breakouts from consolidation bases to accumulate large positions, driving a multi-month trend.
+
+Rather than running a risky short strategy on tops, this strategy deploys **Institutional Breakout Accumulation (IBA)**:
+1. **Long-Only Breakout Execution**: Buy confirmed breakouts emerging from sound, tight consolidation bases.
+2. **Exhaustion Guard as a Negative Filter**: Vetoes buying into distribution tops (parabolic runs, rejection wicks).
+
+---
+
+## 2. The 4-Layer Qualification Funnel
+
+```mermaid
+flowchart TD
+    A["Nifty 500 Universe Scan<br/>(~500 stocks daily)"] --> B{"Layer 1: 52W High Proximity<br/>Close within 3% of 52W High"}
+    B -->|PASS| C{"Layer 2: Base Structure Check<br/>15-60 days base, depth ≤ 20%, ATR contraction"}
+    B -->|FAIL| X1[❌ Skip]
+    C -->|PASS| D{"Layer 3: Institutional Volume<br/>Volume ≥ 2.0× 20d SMA (≤ 20×)"}
+    C -->|FAIL| X2["❌ Skip (no base / deep crash)"]
+    D -->|PASS| E{"Layer 4: Growth Fundamentals<br/>Sales/Profit Growth, ROCE ≥ 12%, D/E < 1.0"}
+    D -->|FAIL| X3["❌ Skip (low volume)"]
+    E -->|PASS| F{"Exhaustion Guard<br/>Parabolic? Rejection Wick? Churn?"}
+    E -->|FAIL| X4["❌ Skip (weak growth)"]
+    F -->|CLEAR| G["✅ Stage 1 RADAR Signal<br/>Added to Watchlist"]
+    F -->|EXHAUSTED| X5["🔴 VETO: Climax Top"]
 ```
-                       52-WEEK HIGH HIT WITH VOLUME SPIKE
-                                       │
-        ┌──────────────────────────────┴──────────────────────────────┐
-        ▼                                                             ▼
-[ Scenario 1: Clean Close at High ]                   [ Scenario 2: Severe Rejection at High ]
-- Close in top 20% of candle range                    - Long upper wick (> 50% of range)
-- From a 4-8 week consolidation                       - Parabolic run already (> 40% in 1 month)
-- Strong fundamentals (Sales/Profit > 15%)            - Closes in bottom 40% of range
-        │                                                             │
-        ▼                                                             ▼
-TACTIC 1: MOMENTUM BREAKOUT / RETEST                  TACTIC 2: EXHAUSTION CLIMAX
-(Buy to ride multi-month trend)                       (Profit booking on delivery / Short in F&O)
+
+### Layer 1: 52-Week High Proximity
+* Price close must be within **3%** of rolling 252-day high, or today's high broke prior 52W high, or fresh 52W high printed in the last 5 trading days.
+* Scans entire curated **Nifty 500/200 universe** locally (`config/nifty500.csv`), preventing omission of steady compounders.
+
+### Layer 2: Base Structure & VCP Check
+* **Base Duration**: 15 to 60 trading days consolidation.
+* **Base Depth**: Maximum correction inside base $\le 20\%$.
+* **ATR Contraction (VCP)**: Pre-breakout ATR $\le 80\%$ of peak base ATR (volatility dried up).
+* **Stan Weinstein Stage 2**: Price > 150-day SMA, Price > 200-day SMA, and 200-day SMA is rising.
+
+### Layer 3: Institutional Volume Expansion
+* Breakout day volume $\ge 2.0\times$ 20-day SMA volume (or 5-day max ratio $\ge 2.5\times$).
+* Upper ceiling $\le 20.0\times$ to avoid single-day blowoff exhausts.
+
+### Negative Filter: Exhaustion Climax Guard
+If **any 2 or more** triggers fire, the breakout is rejected:
+1. **Parabolic Stretch**: Price $> 40\%$ above 50-day EMA.
+2. **Rejection Upper Wick**: Upper shadow $\ge 50\%$ of daily candle range.
+3. **Weak Close**: Close in bottom 40% of daily candle range.
+4. **Extreme Volume Churn**: Volume $> 15\times$ 20d SMA with $< 1\%$ price gain.
+
+### Layer 4: Growth Fundamental Screen
+Enforced via Screener.in (`src/scanner/screener_client.py`):
+* **Revenue Growth YoY**: $\ge 10.0\%$
+* **Net Profit Growth YoY**: $\ge 12.0\%$
+* **ROCE**: $\ge 12.0\%$
+* **Debt to Equity**: $< 1.0$ (growth companies can support moderate leverage)
+* **Promoter Holding**: $\ge 40.0\%$
+* **Promoter Pledge**: $< 15.0\%$
+
+---
+
+## 3. The 3-Tier Storage & Execution Lifecycle
+
+```mermaid
+flowchart LR
+    A[Scanner Radar] -->|User Shortlists| B[Tier 1: Watchlist<br/>data/watchlist_52_high.json]
+    B -->|Stage 2 Buy Trigger| C[User Buys]
+    C -->|User Logs Buy| D[Tier 2: Active Portfolio<br/>data/portfolio_52_high.json]
+    D -->|Daily Trailing 20 EMA Sentinel| E{Check SL & Targets}
+    E -->|Safe / Tightening / Alert| D
+    E -->|All Shares Sold| F[Tier 3: Trade Ledger<br/>data/trade_history_52_high.json]
 ```
 
----
-
-## 2. Tactic 1: Momentum Continuation Breakout (Long)
-- **Base Requirement**: Emerges from a 3 to 8 week consolidation base (not vertically overextended).
-- **Candle Requirement**: Closes in the **top 20%** of the day's high-low range with minimal upper shadow.
-- **Volume**: $\ge 2.5\times$ to $5\times$ 20-day average volume.
-- **Stop-Loss**: Low of breakout day or $-6\%$ to $-8\%$.
-- **Trailing Rule**: Daily 20 EMA trail.
+1. **Tier 1 (`data/watchlist_52_high.json`)**:
+   - Monitored daily for follow-through Stage 2 Buy Confirmation (close above breakout pivot high).
+2. **Tier 2 (`data/portfolio_52_high.json`)**:
+   - Monitored daily with dynamic **trailing 20-day EMA ratchet** (moves only UP, never down).
+3. **Tier 3 (`data/trade_history_52_high.json`)**:
+   - Permanent closed trade ledger with complete execution metrics, realized PnL, duration, and return %.
 
 ---
 
-## 3. Tactic 2: Exhaustion Climax / UTAD (Short / Profit-Taking)
-- **Context**: Parabolic run already underway ($> 30\%$ above 50 EMA without basing).
-- **Candle Rejection**: Upper shadow $\ge 50\%$ of total range, or closes in lower 40% of range on $5\times - 15\times$ volume.
-- **Action**:
-  - Delivery holdings: **100% Exit / Book Profit**.
-  - F&O stocks: Short entry on breakdown below climax candle low with tight SL above the high.
+## 4. Daily Sentinel & Trailing Stop Mechanics
+
+| Status Badge | Condition | Action / Notification |
+| :--- | :--- | :--- |
+| 🟢 **SAFE** | Price > Trailing 20 EMA and > entry price | Hold comfortably; trend riding in progress. |
+| 🟡 **TIGHTENING** | Price within 2.0% of Trailing 20 EMA | *"Price approaching trailing stop; monitoring closely."* |
+| 🟠 **RADAR ALERT** | 1 close below Trailing 20 EMA | *"First close below 20 EMA. Prepare exit order for tomorrow."* |
+| 🔴 **DECISION REQD** | 2 consecutive closes below 20 EMA OR price < initial SL | *"Trailing stop confirmed broken. Recommend full exit."* |
+| 🎯 **TARGET 1 HIT** | Price $\ge +15\%$ from entry price | *Recommend booking 50% profit; ratchet SL to Breakeven.* |
+| 🏆 **TARGET 2 HIT** | Price $\ge +30\%$ from entry price | *Recommend booking remaining 50% or trailing with 50 EMA.* |
 
 ---
 
-## 4. Key Architectural Lessons from 52-Week Low Strategy
+## 5. CLI Interface (`scripts/run_52_high_scanner.py`)
 
-> [!IMPORTANT]
-> **Key Architectural Pattern to Reuse from 52-Week Low Strategy**:
-> During the implementation of the 52-Week Low Strategy, two fundamental lessons were learned that **must** be applied directly to the 52-Week High Strategy:
->
-> 1. **Local Institutional Discovery Base (`config/nifty500.csv` & `config/nifty200.csv`)**:
->    - **Never rely solely on external daily web scrapers (like NSE "top gainers")**.
->    - Strong compounders frequently break out into 52-week highs steadily (+1.5% to +3.0%) without appearing in the volatile "Top 20 Percentage Gainers" list.
->    - The 52W High scanner **must scan the curated local Nifty 500 universe** directly using `SmartCacheManager` so zero quality leaders are missed.
->
-> 2. **Multi-Session Breakout & Retest Lookback (T-5 Day Window)**:
->    - Just like capitulation, **breakouts are rarely isolated to a single day**.
->    - A stock may have its $5\times$ volume breakout on Day 1, and on Day 3–5 it may test the breakout level on lower volume (pullback/retest).
->    - The technical engine must evaluate a rolling **5-day lookback window** for maximum volume expansion and breakout level retests, rather than evaluating only the current day's single bar in isolation.
-
----
-
-## 5. Implementation Schedule
-Implementation will follow the completion of the 52-Week Low Capitulation Strategy (Phases B, C, D).
-
+| Command | Description | Example |
+| :--- | :--- | :--- |
+| `daily` | Run full daily evening briefing | `python scripts/run_52_high_scanner.py daily` |
+| `radar` | Scan candidate symbols without modifying state | `python scripts/run_52_high_scanner.py radar --symbols TRENT BEL` |
+| `portfolio` | Fast portfolio check with trailing stop levels | `python scripts/run_52_high_scanner.py portfolio` |
+| `watchlist` | Check watchlist stocks for Stage 2 Buy confirmations | `python scripts/run_52_high_scanner.py watchlist` |
+| `audit` | Deep technical, base, and fundamental audit of single stock | `python scripts/run_52_high_scanner.py audit TRENT` |
+| `buy` | Log order execution into Tier 2 Active Portfolio | `python scripts/run_52_high_scanner.py buy TRENT 50 7200.0` |
+| `sell` | Log partial or full exit (auto-archives to Tier 3 on full exit) | `python scripts/run_52_high_scanner.py sell TRENT 25 8280.0 TARGET_1` |

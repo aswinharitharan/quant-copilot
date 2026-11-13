@@ -52,6 +52,8 @@ class FundamentalAudit(BaseModel):
     cfo_last_yr_cr: Optional[float] = None
     promoter_holding_pct: Optional[float] = None
     promoter_pledge_pct: Optional[float] = None
+    sales_growth_yoy_pct: Optional[float] = None
+    profit_growth_yoy_pct: Optional[float] = None
     passed_audit: bool = False
     failure_reasons: List[str] = Field(default_factory=list)
 
@@ -183,4 +185,132 @@ class DailyDashboard52(BaseModel):
     active_portfolio_status: List[PortfolioStock] = Field(default_factory=list)
     material_insider_trades: List[InsiderTradeRecord] = Field(default_factory=list)
     summary_notes: List[str] = Field(default_factory=list)
+
+
+# -------------------------------------------------------------------------
+# 6. 52-WEEK HIGH BREAKOUT MODELS (STAGE 2 / IBA STRATEGY)
+# -------------------------------------------------------------------------
+
+class BreakoutStage(str, Enum):
+    """Lifecycle stage for 52-Week High Breakout signals."""
+    RADAR = "RADAR"                  # Day 1: 52W high breakout from valid base + passed audit
+    CONFIRMED_BUY = "CONFIRMED_BUY"  # Follow-through candle closed above pivot high
+    INVALIDATED = "INVALIDATED"      # Price dropped > 5% below breakout or broke base
+
+
+class HighStockStatusBadge(str, Enum):
+    """Daily status badge for active 52-Week High holdings."""
+    SAFE = "SAFE"                    # Holding cleanly above trailing 20 EMA and entry
+    TIGHTENING = "TIGHTENING"        # Within 2.0% of trailing 20 EMA
+    RADAR_ALERT = "RADAR_ALERT"      # 1 close below trailing 20 EMA (prepare exit)
+    DECISION_REQD = "DECISION_REQD"  # 2 consecutive closes below 20 EMA or broke initial SL
+    TARGET_1_HIT = "TARGET_1_HIT"    # Crossed +15% target (book 50%, move SL to BE)
+    TARGET_2_HIT = "TARGET_2_HIT"    # Crossed +30% target (book remaining or trail tightly)
+
+
+class ConsolidationBaseMetrics(BaseModel):
+    """Metrics assessing VCP / base consolidation before breakout."""
+    base_duration_days: int          # Trading days in consolidation base (ideal: 15-60)
+    base_depth_pct: float            # Max drawdown % within base (ideal: <= 20%)
+    atr_contraction_ratio: float     # ATR at breakout / ATR at base start (ideal: <= 0.80)
+    above_150_sma: bool              # Close > 150-day SMA
+    above_200_sma: bool              # Close > 200-day SMA
+    rising_200_sma: bool             # 200 SMA today > 200 SMA 20 days ago
+    passed_base_check: bool = False  # True if all base criteria met
+    failure_reasons: List[str] = Field(default_factory=list)
+
+
+class ExhaustionMetrics(BaseModel):
+    """Metrics checking for climax run / blowoff distribution tops."""
+    is_parabolic: bool = False       # Price > 40% above 50-day EMA
+    has_rejection_wick: bool = False # Upper shadow >= 50% of daily candle range
+    close_in_lower_half: bool = False# Close in bottom 40% of daily candle range
+    extreme_volume: bool = False     # Volume > 15x 20d SMA with < 1% price gain
+    exhaustion_score: int = 0        # Count of triggered red flags (0-4)
+    is_exhausted: bool = False       # True if exhaustion_score >= 2 (VETO trigger)
+
+
+class BreakoutSignal(BaseModel):
+    """Technical 52-Week High Breakout Signal."""
+    symbol: str
+    breakout_date: str
+    breakout_price: float            # Close on breakout bar
+    high_52w: float                  # Prior rolling 252-day high
+    today_high: float
+    today_low: float
+    today_volume: int
+    avg_volume_20d: float
+    volume_ratio: float              # today_volume / avg_volume_20d
+    initial_sl: float                # Low of breakout candle or entry - 6% (whichever tighter)
+    trailing_20ema: float            # Current 20-day EMA (trailing sentinel)
+    target_1_15pct: float            # Entry + 15%
+    target_2_30pct: float            # Entry + 30%
+    base_metrics: ConsolidationBaseMetrics
+    exhaustion: ExhaustionMetrics
+    audit: FundamentalAudit
+    insider_activity: Optional[InsiderTradeRecord] = None
+    stage: BreakoutStage = BreakoutStage.RADAR
+    confirmation_date: Optional[str] = None
+    confirmation_price: Optional[float] = None
+
+
+class HighWatchlistStock(BaseModel):
+    """Tier 1: 52-Week High stocks user is monitoring for confirmation."""
+    symbol: str
+    added_date: str
+    breakout_date: str
+    breakout_price: float
+    pivot_high: float
+    initial_sl: float
+    trailing_20ema: float
+    target_1_15pct: float
+    target_2_30pct: float
+    notes: Optional[str] = ""
+    history_notes: List[str] = Field(default_factory=list)
+    is_buy_triggered: bool = False
+    trigger_date: Optional[str] = None
+    trigger_price: Optional[float] = None
+
+    def add_note(self, note: str, timestamp: Optional[str] = None):
+        """Append a timestamped note to the history log."""
+        ts = timestamp or datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M UTC")
+        self.history_notes.append(f"[{ts}] {note}")
+
+
+class HighPortfolioStock(BaseModel):
+    """Tier 2: Active 52-Week High holdings with trailing 20 EMA ratchet."""
+    symbol: str
+    entry_date: str
+    entry_price: float
+    total_quantity_bought: int
+    remaining_quantity: int
+    initial_sl: float
+    highest_high_since_entry: float
+    trailing_sl: float               # Dynamic floor: ratchets up with 20 EMA, never down
+    target_1_15pct: float
+    target_2_30pct: float
+    current_price: float
+    unrealized_pnl_pct: float
+    status_badge: HighStockStatusBadge = HighStockStatusBadge.SAFE
+    consecutive_closes_below_trail: int = 0
+    notes: Optional[str] = ""
+    history_notes: List[str] = Field(default_factory=list)
+    partial_sells: List[TradeSellRecord] = Field(default_factory=list)
+
+    def add_note(self, note: str, timestamp: Optional[str] = None):
+        """Append a timestamped note to the history log."""
+        ts = timestamp or datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M UTC")
+        self.history_notes.append(f"[{ts}] {note}")
+
+
+class DailyDashboard52High(BaseModel):
+    """Daily executive briefing payload for 'Whats today for 52 High'."""
+    as_of_date: str
+    new_radar_signals: List[BreakoutSignal] = Field(default_factory=list)
+    watchlist_buy_triggers: List[HighWatchlistStock] = Field(default_factory=list)
+    active_portfolio_status: List[HighPortfolioStock] = Field(default_factory=list)
+    exhaustion_warnings: List[BreakoutSignal] = Field(default_factory=list)
+    material_insider_trades: List[InsiderTradeRecord] = Field(default_factory=list)
+    summary_notes: List[str] = Field(default_factory=list)
+
 
