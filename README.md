@@ -67,9 +67,29 @@ To resume work in any new chat window with minimal token consumption:
 
 ---
 
-## 📡 Public API Reference (`ScannerService`)
+## 📡 Public API Reference (`UnifiedScannerService`, `ScannerService` & `HighScannerService`)
 
-The unified service facade (`src/scanner/service.py`) provides the core interface for the 52-Week Low Strategy:
+The unified orchestrator and strategy service facades (`src/scanner/unified_service.py`, `src/scanner/service.py` & `src/scanner/high_service.py`) provide the core interfaces for QuantCopilot:
+
+### Unified 52-Week Strategy Orchestrator (`UnifiedScannerService`)
+
+Trigger phrase: **"whats today for 52"** — executes both strategies concurrently and produces a unified executive briefing.
+
+```bash
+# Run unified evening dashboard for both strategies (High Breakout + Low Capitulation)
+python scripts/run_52_scanner.py daily
+
+# Run specific strategy only
+python scripts/run_52_scanner.py daily --strategy high
+python scripts/run_52_scanner.py daily --strategy low
+```
+
+| Method | Signature | Description |
+| :--- | :--- | :--- |
+| `get_unified_daily_briefing` | `(candidate_symbols=None, as_of_date=None, strategy="both", skip_fundamental_audit=False) -> Dict[str, Any]` | Concurrently runs both strategies and aggregates results into a combined payload. |
+| `format_unified_briefing_markdown` | `(briefing: Dict[str, Any]) -> str` | Formats both strategy dashboards, active holdings, and deduplicated promoter insider trades into an executive report. |
+
+### 52-Week Low Strategy (`ScannerService`)
 
 | Method | Signature | Description |
 | :--- | :--- | :--- |
@@ -81,6 +101,22 @@ The unified service facade (`src/scanner/service.py`) provides the core interfac
 | `audit_single_symbol` | `(symbol: str, df=None) -> Dict[str, Any]` | Deep dive on a single ticker: fundamentals, insider activity, and technical levels. |
 | `record_buy` | `(symbol, entry_price, quantity, entry_date=None, notes=None) -> PortfolioStock` | Records order execution into Tier 2 Active Portfolio. |
 | `record_sell` | `(symbol, sell_price, quantity, reason, sell_date=None, notes=None) -> Tuple[PortfolioStock, Optional[ClosedTradeLedger]]` | Records partial or full exit and archives completed trades to Tier 3 Ledger. |
+
+### 52-Week High Breakout Strategy (`HighScannerService`)
+
+| Method | Signature | Description |
+| :--- | :--- | :--- |
+| `get_daily_briefing` | `(candidate_symbols=None, as_of_date=None, skip_fundamental_audit=False, current_prices_and_emas=None) -> DailyDashboard52High` | Full evening executive briefing ('Whats today for 52 High') with 4-layer breakout funnel and trailing stop sentinels. |
+| `format_daily_briefing_markdown` | `(dashboard: DailyDashboard52High) -> str` | Formats the 52W-High briefing payload into an executive Markdown report. |
+| `scan_radar_candidates` | `(candidate_symbols=None, as_of_date=None) -> Tuple[List[BreakoutSignal], str]` | Scans Nifty 500 candidate universe for sound 52W high breakouts from VCP consolidation bases. |
+| `get_portfolio_summary` | `(current_prices_and_emas=None, as_of_date=None) -> Tuple[List[HighPortfolioStock], str]` | Checks active breakout positions against dynamic trailing 20 EMA ratchet and target levels (+15%, +30%). |
+| `get_watchlist_summary` | `(as_of_date=None) -> Tuple[List[HighWatchlistStock], str]` | Reviews Tier 1 breakout watchlist for Stage 2 confirmation triggers (close above breakout pivot high). |
+| `audit_single_symbol` | `(symbol: str, df=None) -> Dict[str, Any]` | Deep audit of single symbol: base depth %, ATR contraction ratio, 200 SMA slope, growth fundamentals. |
+| `record_buy` | `(symbol, entry_price, quantity, entry_date=None, notes=None) -> HighPortfolioStock` | Logs position buy into Tier 2 portfolio with initial SL and trailing 20 EMA ratchet floor. |
+| `record_sell` | `(symbol, sell_price, quantity, reason, sell_date=None, notes=None) -> Tuple[HighPortfolioStock, Optional[ClosedTradeLedger]]` | Logs partial profit taking (e.g. 50% at T1) and archives completed trades to Tier 3 Ledger. |
+
+> **Note on Internal Helpers**:  
+> Methods such as `add_to_watchlist` and `remove_from_watchlist` are convenience helpers wrapping `PortfolioTracker` / `HighPortfolioTracker`. They facilitate CLI operations and internal copilot shortcuts, but are **not** exposed in the public Model Context Protocol (MCP) server schema.
 
 > **Note on Internal Helpers**:  
 > Methods such as `add_to_watchlist` and `remove_from_watchlist` are convenience helpers wrapping `PortfolioTracker`. They facilitate CLI operations and internal copilot shortcuts, but are **not** exposed in the public Model Context Protocol (MCP) server schema.

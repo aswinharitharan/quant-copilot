@@ -85,8 +85,11 @@ class LowCapitulationScanner:
                     with open(cfg_path, "r", encoding="utf-8") as f:
                         reader = csv.DictReader(f)
                         for row in reader:
+                            series = (row.get("Series") or "").strip().upper()
+                            if series and series != "EQ":
+                                continue
                             sym = (row.get("Symbol") or "").strip().upper()
-                            if sym and sym not in symbols:
+                            if sym and not sym.startswith("DUMMY") and sym not in symbols:
                                 symbols.append(sym)
                 except Exception as e:
                     logger.warning(f"Error reading {cfg_path}: {e}")
@@ -95,10 +98,8 @@ class LowCapitulationScanner:
     def fetch_nse_52w_low_symbols(self, force_refresh: bool = False) -> List[str]:
         """Fetch list of symbols currently at or near 52-week low directly from NSE.
         
-        Cached locally for NSE_CACHE_TTL seconds to avoid hammering NSE endpoints.
-        Combines NSE live API output with local quality universe (Nifty 500)
-        to prevent missing institutional stocks that drift into 52W lows without
-        being top daily percentage losers.
+        Cached locally for NSE_CACHE_TTL seconds. Queries NSE live variations endpoint
+        to identify stocks within 15% of their 52-week low.
         """
         cache_file = self.cache_dir / "nse_52w_low_symbols.json"
         now = time.time()
@@ -109,7 +110,7 @@ class LowCapitulationScanner:
                 if (now - mtime) < NSE_CACHE_TTL:
                     with open(cache_file, "r", encoding="utf-8") as f:
                         cached_data = json.load(f)
-                        if isinstance(cached_data, list):
+                        if isinstance(cached_data, list) and cached_data:
                             return cached_data
             except Exception as e:
                 logger.warning(f"Failed to read 52W low cache: {e}")
@@ -123,7 +124,7 @@ class LowCapitulationScanner:
                 {
                     "User-Agent": ua,
                     "Accept": "*/*",
-                    "Referer": "https://www.nseindia.com/market-data/52-week-high-low",
+                    "Referer": "https://www.nseindia.com",
                 }
             )
             # Hit homepage first to collect cookies
@@ -132,73 +133,69 @@ class LowCapitulationScanner:
             except Exception:
                 pass
 
-            resp = s.get(self.NSE_52W_LOW_URL, timeout=10)
-            if resp.status_code in (404, 429):
-                logger.warning(f"NSE 52W Low API returned {resp.status_code}; falling back immediately to cache.")
-                if cache_file.exists():
-                    try:
-                        with open(cache_file, "r", encoding="utf-8") as f:
-                            return json.load(f)
-                    except Exception as e:
-                        logger.warning(f"Error reading cache on {resp.status_code} fallback: {e}")
-            elif resp.status_code == 200:
-                data = resp.json()
-                raw_list = []
-                if isinstance(data, dict):
-                    if isinstance(data.get("data"), list):
-                        raw_list = data["data"]
-                    elif isinstance(data.get("NIFTY"), dict) and isinstance(data["NIFTY"].get("data"), list):
-                        raw_list = data["NIFTY"]["data"]
-                elif isinstance(data, list):
-                    raw_list = data
-
-                for item in raw_list:
-                    if isinstance(item, dict):
-                        sym = item.get("symbol") or item.get("symbolName")
-                        if sym:
-                            symbols_set.add(sym.strip().upper())
+            # Primary: Live analysis variations losers near 52W low
+            r_loosers = s.get("https://www.nseindia.com/api/live-analysis-variations?index=loosers", timeout=10)
+            if r_loosers.status_code == 200:
+                d_loosers = r_loosers.json()
+                if isinstance(d_loosers, dict):
+                    for sec in ["allSec", "FOSec", "NIFTY", "NIFTYNEXT50"]:
+                        sec_data = d_loosers.get(sec, {})
+                        if isinstance(sec_data, dict):
+                            for it in sec_data.get("data", []):
+                                if isinstance(it, dict):
+                                    sym = it.get("symbol")
+                                    near_wkl = it.get("nearWKL")
+                                    # Candidate if within 15% of 52W low
+                                    if sym and near_wkl is not None:
+                                        try:
+                                            if float(near_wkl) >= -15.0:
+                                                symbols_set.add(sym.strip().upper())
+                                        except (ValueError, TypeError):
+                                            pass
             else:
-                logger.warning(f"NSE 52W Low API status: {resp.status_code}")
+                logger.warning(f"NSE variations losers status: {r_loosers.status_code}")
 
-            # If empty, fallback to live analysis losers near 52-week low
+            # Secondary fallback: legacy endpoint
             if not symbols_set:
-                r_loosers = s.get("https://www.nseindia.com/api/live-analysis-variations?index=loosers", timeout=10)
-                if r_loosers.status_code in (404, 429) and cache_file.exists():
-                    try:
-                        with open(cache_file, "r", encoding="utf-8") as f:
-                            return json.load(f)
-                    except Exception:
-                        pass
-                elif r_loosers.status_code == 200:
-                    d_loosers = r_loosers.json()
-                    if isinstance(d_loosers, dict):
-                        for sec in ["allSec", "FOSec", "NIFTY", "NIFTYNEXT50"]:
-                            sec_data = d_loosers.get(sec, {})
-                            if isinstance(sec_data, dict):
-                                for it in sec_data.get("data", []):
-                                    if isinstance(it, dict):
-                                        sym = it.get("symbol")
-                                        near_wkl = it.get("nearWKL", -999)
-                                        # Within 15% of 52W low
-                                        if sym and near_wkl > -15.0:
-                                            symbols_set.add(sym.strip().upper())
+                resp = s.get(self.NSE_52W_LOW_URL, timeout=10)
+                if resp.status_code == 200:
+                    data = resp.json()
+                    raw_list = []
+                    if isinstance(data, dict):
+                        if isinstance(data.get("data"), list):
+                            raw_list = data["data"]
+                        elif isinstance(data.get("NIFTY"), dict) and isinstance(data["NIFTY"].get("data"), list):
+                            raw_list = data["NIFTY"]["data"]
+                    elif isinstance(data, list):
+                        raw_list = data
+
+                    for item in raw_list:
+                        if isinstance(item, dict):
+                            sym = item.get("symbol") or item.get("symbolName")
+                            if sym:
+                                symbols_set.add(sym.strip().upper())
         except Exception as e:
             logger.warning(f"NSE 52W Low API fetch failed: {e}")
 
-        # Fallback / Supplement with local Quality Universe (Nifty 500)
-        quality_symbols = self.load_quality_universe_symbols()
-        for q_sym in quality_symbols:
-            symbols_set.add(q_sym.strip().upper())
+        # If live API succeeded, keep those candidates.
+        # Only fall back to local quality universe if live API completely failed.
+        if not symbols_set:
+            if cache_file.exists():
+                try:
+                    with open(cache_file, "r", encoding="utf-8") as f:
+                        cached = json.load(f)
+                        if cached:
+                            return cached
+                except Exception as e:
+                    logger.warning(f"Failed fallback cache read: {e}")
 
-        # Fallback to cached data if exists and still empty
-        if not symbols_set and cache_file.exists():
-            try:
-                with open(cache_file, "r", encoding="utf-8") as f:
-                    return json.load(f)
-            except Exception as e:
-                logger.warning(f"Failed fallback cache read: {e}")
+            quality_symbols = self.load_quality_universe_symbols()
+            for q_sym in quality_symbols:
+                symbols_set.add(q_sym.strip().upper())
 
-        sorted_symbols = sorted(symbols_set)
+        # Filter out non-equity symbols
+        filtered = [s for s in symbols_set if not s.endswith("-RE") and not s.startswith("DUMMY")]
+        sorted_symbols = sorted(filtered)
         if sorted_symbols:
             try:
                 with open(cache_file, "w", encoding="utf-8") as f:

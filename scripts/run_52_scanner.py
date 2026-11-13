@@ -47,6 +47,12 @@ def main():
     )
     p_daily.add_argument("--symbols", nargs="*", help="Optional specific list of candidate symbols to scan")
     p_daily.add_argument("--date", help="Optional as-of date (YYYY-MM-DD)")
+    p_daily.add_argument(
+        "--strategy",
+        choices=["both", "high", "low"],
+        default="both",
+        help="Strategy to run: both (unified default), high (52W High Breakout), low (52W Low Capitulation)",
+    )
 
     # 1b. Radar Scan (Only Discovery + Filter + Audit)
     p_radar = subparsers.add_parser(
@@ -102,15 +108,39 @@ def main():
     service = ScannerService()
 
     if args.command == "daily":
-        print("🔍 Running 52-Week Low Daily Funnel Scan...")
-        current_prices = {} if getattr(args, "offline", False) else None
-        dashboard = service.get_daily_briefing(
-            candidate_symbols=args.symbols,
-            as_of_date=args.date,
-            current_prices=current_prices,
-        )
-        md = service.format_daily_briefing_markdown(dashboard)
-        print("\n" + md)
+        strategy = getattr(args, "strategy", "both")
+        if strategy == "both":
+            print("🔍 Running Unified 52-Week High & Low Daily Funnel Scan...")
+            from src.scanner.unified_service import UnifiedScannerService
+            unified = UnifiedScannerService()
+            briefing = unified.get_unified_daily_briefing(
+                candidate_symbols=args.symbols,
+                as_of_date=args.date,
+                strategy="both",
+            )
+            md = unified.format_unified_briefing_markdown(briefing)
+            print("\n" + md)
+        elif strategy == "high":
+            print("🚀 Running 52-Week High Daily Funnel Scan...")
+            from src.scanner.high_service import HighScannerService
+            high_service = HighScannerService()
+            cur_px = {} if getattr(args, "offline", False) else None
+            db = high_service.get_daily_briefing(
+                candidate_symbols=args.symbols,
+                as_of_date=args.date,
+                current_prices_and_emas=cur_px,
+            )
+            print("\n" + high_service.format_daily_briefing_markdown(db))
+        else:
+            print("🔍 Running 52-Week Low Daily Funnel Scan...")
+            current_prices = {} if getattr(args, "offline", False) else None
+            dashboard = service.get_daily_briefing(
+                candidate_symbols=args.symbols,
+                as_of_date=args.date,
+                current_prices=current_prices,
+            )
+            md = service.format_daily_briefing_markdown(dashboard)
+            print("\n" + md)
 
     elif args.command == "radar":
         print("📡 Running 52-Week Low Radar (Discovery + Filter + Audit)...")

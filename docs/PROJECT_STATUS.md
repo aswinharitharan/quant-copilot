@@ -1,8 +1,8 @@
 # QuantCopilot Living Status & Context Registry
 
 > **Purpose**: Read this file at the start of any new chat session to instantly restore full project context with minimal token usage.  
-> **Last Updated**: 2026-11-10  
-> **Current Active Phase**: Phase 1 (Core Quant & Execution Engine) + 52-Week Low Strategy Complete + Quality Universe & Lookback Fix; 92/92 tests passing  
+> **Last Updated**: 2026-11-13  
+> **Current Active Phase**: Phase 1 (Core Quant & Execution Engine) + 52-Week Low Strategy Complete + 52-Week High Breakout Strategy Complete + Unified Orchestrator Complete; 126/126 tests passing  
 
 ---
 
@@ -143,8 +143,22 @@ We execute Phase 1 in clear, self-contained chunks:
 > **Note on Internal Helpers**:  
 > Convenience methods such as `add_to_watchlist` and `remove_from_watchlist` are internal helper proxies to `PortfolioTracker`. They facilitate interactive CLI execution and scripting, but are **not** part of the published Model Context Protocol (MCP) tool contract.
 
-### 3. 52-Week High Dual-Mode Strategy ([`docs/STRATEGY_52_WEEK_HIGH.md`](file:///Users/aswinkarthik.th/.gemini/antigravity-ide/scratch/quant-copilot/docs/STRATEGY_52_WEEK_HIGH.md))
-- **Concept**: Dual-mode engine distinguishing clean continuation breakouts (close at high on base) from buying climaxes / distribution tops (long upper rejection wick on parabolic run for shorting or full exit).
-- **Progress Status**: ⏳ Roadmapped (Scheduled after completion of 52-Week Low strategy).
+### 3. 52-Week High Breakout Strategy ([`docs/STRATEGY_52_WEEK_HIGH.md`](file:///Users/aswinkarthik.th/.gemini/antigravity-ide/scratch/quant-copilot/docs/STRATEGY_52_WEEK_HIGH.md))
+- **Concept**: Institutional Breakout Accumulation (IBA) & Stage 2 Growth. 4-layer qualification funnel (52W high proximity, VCP base structure, volume expansion, growth fundamentals screen via Screener.in), Exhaustion Climax Guard (veto on blowoff tops), and dynamic trailing 20 EMA ratchet.
+- **Interactive Lifecycle**: Radar Discovery $\to$ User Watchlist (Tier 1) $\to$ Stage 2 Buy Confirmation (close above pivot high) $\to$ Active Portfolio Tracking (Tier 2 with Trailing 20 EMA Sentinel & Target 1/2) $\to$ Permanent Closed Trade Ledger (Tier 3).
+- **Progress Status**: ✅ **PRODUCTION-READY — All Phases (A, B, C, D) Complete** (122/122 total project suite passing).
+  - [`src/scanner/models.py`](file:///Users/aswinkarthik.th/.gemini/antigravity-ide/scratch/quant-copilot/src/scanner/models.py): Pydantic data models for breakout signals, base metrics, exhaustion metrics, watchlist, portfolio, and dashboard.
+  - [`src/scanner/screener_client.py`](file:///Users/aswinkarthik.th/.gemini/antigravity-ide/scratch/quant-copilot/src/scanner/screener_client.py): Fundamental growth audit (Sales YoY $\ge 10\%$, Profit YoY $\ge 12\%$, ROCE $\ge 12\%$, D/E $< 1.0$, Promoter Holding $\ge 40\%$, Pledge $< 15\%$).
+  - [`src/scanner/high_scanner.py`](file:///Users/aswinkarthik.th/.gemini/antigravity-ide/scratch/quant-copilot/src/scanner/high_scanner.py): `HighBreakoutScanner` implementing 4-layer funnel, VCP base detection, exhaustion guard, and Stage 2 confirmation state machine.
+  - [`src/scanner/high_tracker.py`](file:///Users/aswinkarthik.th/.gemini/antigravity-ide/scratch/quant-copilot/src/scanner/high_tracker.py): `HighPortfolioTracker` managing 3-tier JSON architecture (`data/watchlist_52_high.json`, `data/portfolio_52_high.json`, `data/trade_history_52_high.json`), trailing 20 EMA ratchet, partial exits (+15% T1, +30% T2), and auto-archiving.
+  - [`src/scanner/high_service.py`](file:///Users/aswinkarthik.th/.gemini/antigravity-ide/scratch/quant-copilot/src/scanner/high_service.py): `HighScannerService` unified facade for `"Whats today for 52 High"` briefings.
+  - [`scripts/run_52_high_scanner.py`](file:///Users/aswinkarthik.th/.gemini/antigravity-ide/scratch/quant-copilot/scripts/run_52_high_scanner.py): Full CLI runner supporting `daily`, `radar`, `portfolio`, `watchlist`, `audit`, `buy`, and `sell`.
+
+### 4. Unified 52-Week Strategy Orchestrator ([`src/scanner/unified_service.py`](file:///Users/aswinkarthik.th/.gemini/antigravity-ide/scratch/quant-copilot/src/scanner/unified_service.py))
+- **Concept**: Single conversational entry point for `"whats today for 52"`. Orchestrates both 52-Week Low Capitulation (`ScannerService`) and 52-Week High Breakout (`HighScannerService`), merging discovery radars, stage 2 buy triggers, active holdings sentinels, and deduplicated SEBI PIT promoter buying into a unified executive Markdown briefing.
+- **CLI Dispatcher**: [`scripts/run_52_scanner.py`](file:///Users/aswinkarthik.th/.gemini/antigravity-ide/scratch/quant-copilot/scripts/run_52_scanner.py) with `--strategy {both,high,low}` (defaults to `both`).
+- **Tests**: [`tests/test_unified_scanner_service.py`](file:///Users/aswinkarthik.th/.gemini/antigravity-ide/scratch/quant-copilot/tests/test_unified_scanner_service.py) (4/4 tests passing; **126/126 total project test suite passing**).
+
+
 
 
