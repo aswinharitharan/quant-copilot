@@ -1,8 +1,8 @@
 # QuantCopilot Living Status & Context Registry
 
 > **Purpose**: Read this file at the start of any new chat session to instantly restore full project context with minimal token usage.  
-> **Last Updated**: 2026-11-13  
-> **Current Active Phase**: Phase 1 (Core Quant & Execution Engine) + 52-Week Low Strategy Complete + 52-Week High Breakout Strategy Complete + Unified Orchestrator Complete + 200 SMA Sideways Enhancements Verified; 129/129 tests passing  
+> **Last Updated**: 2026-11-15  
+> **Current Active Phase**: Phase 1 (Core Quant & Execution Engine) + 52-Week Low/High Unified Orchestrator Complete + 200 SMA Enhanced Verified on NSE Equities & MCX Aluminium (+₹10.60L Alpha); 131/131 tests passing  
 
 ---
 
@@ -64,6 +64,42 @@
 
 8. **Market Scanner / Screener Capabilities (Roadmap)**
    - The declarative `ConditionTree` (`ConditionGroup`, `ConditionNode`) naturally supports market screening (e.g., 52-week high, EMA crossovers) across Nifty 50/500 constituents on the latest candles. Planned as a first-class feature in Phase 2/3.
+
+9. **Independence from Tradetron & Native Direct Broker API Architecture**
+   - Tradetron is recognized purely as a historical benchmark reference and potential third-party distribution marketplace; QuantCopilot operates as a self-contained autonomous quant platform.
+   - Eliminates Tradetron subscription fees (₹1,500–₹3,000/month), execution queue latency (1–3 min delays), and clunky block-building UI. Direct broker connections execute in milliseconds.
+
+10. **Zero-Broker-Tax Model (Dhan + Angel One vs Zerodha)**
+    - Zerodha Kite Connect imposes a prohibitive ₹48,000/year "API tax" (₹2,000/mo trading + ₹2,000/mo historical) and forces fragile daily 6:00 AM manual browser logins.
+    - QuantCopilot leverages a **Dual Zero-Fee Setup**:
+      - **Angel One (SmartAPI)**: 100% Free 10+ year historical data + automated TOTP 2FA headless login.
+      - **Dhan (DhanHQ)**: 100% Free live execution API + 30-day persistent tokens + 10 orders/sec rate limit.
+    - Decoupled via `BaseBroker` adapter pattern: Zerodha/Upstox can be added later as optional user-facing connectors without modifying core quant logic.
+
+11. **Cloud-First Execution & Workplace Laptop Boundary**
+    - Personal automated trading bots must **never run on work/office laptops** due to enterprise IT policies, monitoring software, and aggressive sleep/lockout policies that sever order loops.
+    - QuantCopilot is designed to run 24/7 headlessly on an independent cloud VPS (AWS Free Tier EC2, Render, or a ₹350/mo Linux droplet) with instant Telegram/WhatsApp push alerts to the user's mobile phone.
+
+12. **MCX Commodity Microstructure & Compulsory Delivery Safeguards**
+    - MCX Base Metal futures (e.g. Aluminium 5 MT Big Lot / 1 MT Mini Lot) differ fundamentally from equities:
+      - Continuous global price discovery (9:00 AM to 11:30 PM IST = 58 15m bars/day) eliminates opening gap traps.
+      - **Tender Period Danger Zone**: 5 trading days prior to contract expiry, compulsory physical delivery rules apply. Holding into tender period causes massive margin spikes (up to 100%) and severe penalty charges.
+      - **Mandatory Rollover Rule**: All positions in expiring contracts must exit cleanly at **`DTE <= 6`** (before the tender period begins), transferring new entries to the next-month contract.
+      - **Session Filter**: Morning session (09:00–13:00) has thin domestic liquidity and frequent whipsaws. Restricting entries to the **London/NY active overlap window (13:00–22:30 IST)** dramatically boosts win rate and net profit.
+
+13. **Multi-Tenant SaaS Architecture & Webhook-Driven Kill-Switch (Phases 3 & 4)**
+    - Long-term commercialization uses a **Master Signal Dispatcher (Fan-Out)** pattern:
+      - The strategy engine computes 15m indicators once for the market.
+      - On signal firing, the system queries the active subscriber database (`status = 'ACTIVE' AND expiry_date >= NOW()`) and dispatches concurrent async orders to individual broker accounts.
+      - **Automated Plug-Off / Kill-Switch**: Webhook listeners (Razorpay/Stripe) immediately flip status to `'EXPIRED'` upon payment lapse or cancellation, instantly pausing execution on that user's account.
+
+14. **4-Pillar Quantitative Stock Selection Framework**
+    - Quantitatively screens candidate symbols before deploying trend-following systems to avoid whipsaw graveyards:
+      1. *Low Crossing Frequency*: < 6–8 crosses of 200 SMA per year on daily data.
+      2. *Trend Fuel*: ADX(14) > 25 for at least 40%+ of historical bars.
+      3. *High Efficiency*: Kaufman Efficiency Ratio (KER 60) > 0.18–0.35 (smooth directional thrusts).
+      4. *Volatility Headroom*: Daily ATR% > 2.5% (or 15m ATR% > 0.45%) so gains comfortably swamp transaction friction.
+    - Empirical 192-stock Nifty 200 screen completed in `data/reports/nifty200_trend_efficiency_ranking.csv` and documented in `STOCK_SELECTION_GUIDE.md` (Top picks: DIVISLAB, MCX, BHEL, MOTHERSON, OFSS, LAURUSLABS).
 
 ---
 
@@ -158,6 +194,28 @@ We execute Phase 1 in clear, self-contained chunks:
 - **Concept**: Single conversational entry point for `"whats today for 52"`. Orchestrates both 52-Week Low Capitulation (`ScannerService`) and 52-Week High Breakout (`HighScannerService`), merging discovery radars, stage 2 buy triggers, active holdings sentinels, and deduplicated SEBI PIT promoter buying into a unified executive Markdown briefing.
 - **CLI Dispatcher**: [`scripts/run_52_scanner.py`](file:///Users/aswinkarthik.th/.gemini/antigravity-ide/scratch/quant-copilot/scripts/run_52_scanner.py) with `--strategy {both,high,low}` (defaults to `both`).
 - **Tests**: [`tests/test_unified_scanner_service.py`](file:///Users/aswinkarthik.th/.gemini/antigravity-ide/scratch/quant-copilot/tests/test_unified_scanner_service.py) (4/4 tests passing; **126/126 total project test suite passing**).
+
+### 5. Enhanced 200 SMA Trend-Following Strategy (NSE Equities & MCX Aluminium)
+- **Concept**: Vectorized and event-driven trend-following engine designed for Indian stock and commodity futures (15m candles). Overcomes the catastrophic ~70% sideways whipsaw trap of raw 200 SMA by introducing 5 institutional filtering layers:
+  1. **ATR Dead-Zone Envelope**: $SMA(200) \pm 1.0 \times ATR(14)$. Entries only permitted outside the envelope; early exits allowed at the 200 SMA line to protect profits.
+  2. **ADX Regime Gate**: Requires $ADX(14) > 22$ (Equities) or $ADX(14) > 25$ (MCX Aluminium) to filter out flat consolidation.
+  3. **Post-Loss Cooldown**: Enforces an 8-bar (2-hour) waiting window after any losing trade before evaluating new entries.
+  4. **Active Session Window**: Restricts entries to high-liquidity hours (13:00 to 22:30 IST for MCX Aluminium to align with London/NY overlap).
+  5. **Tender Period & Rollover Safety Net**: Mandates exit and handover to next-month contract at $DTE \le 6$ to completely eliminate compulsory delivery penalties.
+- **Empirical Backtest Validations**:
+  - **NSE Stock Futures**: Turned NESTLEIND from -₹5.98L to +₹92k, HINDUNILVR from -₹1.18L to +₹156k, and ALKEM from -₹1.78L to +₹70k (+₹12.13L total turnaround across 3 stocks). Runner: [`scripts/run_enhanced_comparison.py`](file:///Users/aswinkarthik.th/.gemini/antigravity-ide/scratch/quant-copilot/scripts/run_enhanced_comparison.py).
+  - **MCX Aluminium Futures**: Verified across 13,244 real 15m candles (Nov 2025 to Nov 2026, `data/cache/MCX_ALUMINIUM_15m_2025_2026.parquet`). Turned raw 200 SMA from -₹8,61,696 to **+₹1,98,488** (+₹10,60,183 Alpha gain; trades reduced from 440 to 189; win rate increased from 12.3% to 33.9%).
+- **Artifacts & Production Deliverables**:
+  - Dedicated Strategy Modules:
+    - [`src/strategies/nestle_200_sma_enhanced.py`](file:///Users/aswinkarthik.th/.gemini/antigravity-ide/scratch/quant-copilot/src/strategies/nestle_200_sma_enhanced.py)
+    - [`src/strategies/hindunilvr_200_sma_enhanced.py`](file:///Users/aswinkarthik.th/.gemini/antigravity-ide/scratch/quant-copilot/src/strategies/hindunilvr_200_sma_enhanced.py)
+    - [`src/strategies/alkem_200_sma_enhanced.py`](file:///Users/aswinkarthik.th/.gemini/antigravity-ide/scratch/quant-copilot/src/strategies/alkem_200_sma_enhanced.py)
+    - [`src/strategies/mcx_aluminium_200_sma_enhanced.py`](file:///Users/aswinkarthik.th/.gemini/antigravity-ide/scratch/quant-copilot/src/strategies/mcx_aluminium_200_sma_enhanced.py) (Supports 5 MT Big Lot and 1 MT Mini Lot).
+  - Multi-Tab Excel Workbook: [`data/exports/MCX_ALUMINIUM_15m_2025_2026.xlsx`](file:///Users/aswinkarthik.th/.gemini/antigravity-ide/scratch/quant-copilot/data/exports/MCX_ALUMINIUM_15m_2025_2026.xlsx) (Strategy Comparison, Yearly Performance, All Trades Log with 189 trades, Market Data Summary, and 15m Candles).
+  - Runner Scripts: [`scripts/run_mcx_aluminium_backtest.py`](file:///Users/aswinkarthik.th/.gemini/antigravity-ide/scratch/quant-copilot/scripts/run_mcx_aluminium_backtest.py) and [`scripts/export_mcx_aluminium_excel.py`](file:///Users/aswinkarthik.th/.gemini/antigravity-ide/scratch/quant-copilot/scripts/export_mcx_aluminium_excel.py).
+  - Test Suite: [`tests/test_mcx_aluminium.py`](file:///Users/aswinkarthik.th/.gemini/antigravity-ide/scratch/quant-copilot/tests/test_mcx_aluminium.py) (**131/131 total test suite passing**).
+  - Stock Selection Guide: [`data/reports/nifty200_trend_efficiency_ranking.csv`](file:///Users/aswinkarthik.th/.gemini/antigravity-ide/scratch/quant-copilot/data/reports/nifty200_trend_efficiency_ranking.csv) & `STOCK_SELECTION_GUIDE.md` (Top candidates: DIVISLAB, MCX, BHEL, MOTHERSON, OFSS, LAURUSLABS).
+
 
 
 
