@@ -49,9 +49,9 @@ def main():
     p_daily.add_argument("--date", help="Optional as-of date (YYYY-MM-DD)")
     p_daily.add_argument(
         "--strategy",
-        choices=["both", "high", "low"],
-        default="both",
-        help="Strategy to run: both (unified default), high (52W High Breakout), low (52W Low Capitulation)",
+        choices=["all", "both", "high", "low", "short"],
+        default="all",
+        help="Strategy to run: all (unified 3-strategy default), high (Breakout), low (Capitulation), short (Exhaustion MIS)",
     )
 
     # 1b. Radar Scan (Only Discovery + Filter + Audit)
@@ -67,16 +67,18 @@ def main():
     p_port = subparsers.add_parser(
         "portfolio",
         parents=[common_opts],
-        help="Quick view of Tier 2 active portfolio & soft stop badges",
+        help="View active portfolio (segregates Long Swing holdings vs Short Intraday MIS)",
     )
+    p_port.add_argument("--strategy", choices=["all", "long", "short"], default="all", help="Strategy filter")
     p_port.add_argument("--date", help="Optional as-of date (YYYY-MM-DD)")
 
     # 3. Watchlist
     p_watch = subparsers.add_parser(
         "watchlist",
         parents=[common_opts],
-        help="Quick view of Tier 1 watchlist & Stage 2 buy triggers",
+        help="View unified watchlist (automatically shows separate tables for Low, High, Short)",
     )
+    p_watch.add_argument("--strategy", choices=["all", "low", "high", "short"], default="all", help="Strategy filter")
     p_watch.add_argument("--date", help="Optional as-of date (YYYY-MM-DD)")
 
     # 4. Audit
@@ -108,18 +110,24 @@ def main():
     service = ScannerService()
 
     if args.command == "daily":
-        strategy = getattr(args, "strategy", "both")
-        if strategy == "both":
-            print("🔍 Running Unified 52-Week High & Low Daily Funnel Scan...")
+        strategy = getattr(args, "strategy", "all")
+        if strategy in ("all", "both"):
+            print("🔍 Running Unified 52-Week Multi-Strategy Daily Funnel Scan...")
             from src.scanner.unified_service import UnifiedScannerService
             unified = UnifiedScannerService()
             briefing = unified.get_unified_daily_briefing(
                 candidate_symbols=args.symbols,
                 as_of_date=args.date,
-                strategy="both",
+                strategy=strategy,
             )
             md = unified.format_unified_briefing_markdown(briefing)
             print("\n" + md)
+        elif strategy == "short":
+            print("🔻 Running 52-Week High Exhaustion Short Daily Funnel Scan...")
+            from src.scanner.short_service import ShortScannerService
+            short_service = ShortScannerService()
+            db = short_service.get_daily_briefing(candidate_symbols=args.symbols, as_of_date=args.date)
+            print("\n" + short_service.format_daily_briefing_markdown(db))
         elif strategy == "high":
             print("🚀 Running 52-Week High Daily Funnel Scan...")
             from src.scanner.high_service import HighScannerService
@@ -151,12 +159,17 @@ def main():
         print("\n" + summary)
 
     elif args.command == "portfolio":
-        current_prices = {} if getattr(args, "offline", False) else None
-        _, summary = service.get_portfolio_summary(current_prices=current_prices, as_of_date=args.date)
+        from src.scanner.unified_service import UnifiedScannerService
+        unified = UnifiedScannerService()
+        strat = getattr(args, "strategy", "all")
+        summary = unified.get_unified_portfolio(strategy=strat)
         print("\n" + summary)
 
     elif args.command == "watchlist":
-        _, summary = service.get_watchlist_summary(as_of_date=args.date)
+        from src.scanner.unified_service import UnifiedScannerService
+        unified = UnifiedScannerService()
+        strat = getattr(args, "strategy", "all")
+        summary = unified.get_unified_watchlist(strategy=strat)
         print("\n" + summary)
 
     elif args.command == "audit":

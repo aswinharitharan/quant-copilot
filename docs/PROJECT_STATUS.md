@@ -2,7 +2,7 @@
 
 > **Purpose**: Read this file at the start of any new chat session to instantly restore full project context with minimal token usage.  
 > **Last Updated**: 2026-11-16  
-> **Current Active Phase**: Phase 1 (Core Quant & Execution Engine) + 52-Week Low/High Unified Orchestrator Complete with Institutional Liquidity Floor + 200 SMA Enhanced Verified on NSE Equities & MCX Aluminium (+₹10.60L Alpha); 132/132 tests passing  
+> **Current Active Phase**: Phase 1 (Core Quant & Execution Engine) + 52-Week Low/High/Short Unified Orchestrator Complete (Low Capitulation + High Breakout + High Exhaustion Intraday MIS) + Enhanced 200 SMA on NSE & MCX Aluminium; **142/142 tests passing**  
 
 ---
 
@@ -202,7 +202,25 @@ We execute Phase 1 in clear, self-contained chunks:
 - **CLI Dispatcher**: [`scripts/run_52_scanner.py`](file:///Users/aswinkarthik.th/.gemini/antigravity-ide/scratch/quant-copilot/scripts/run_52_scanner.py) with `--strategy {both,high,low}` (defaults to `both`).
 - **Tests**: [`tests/test_unified_scanner_service.py`](file:///Users/aswinkarthik.th/.gemini/antigravity-ide/scratch/quant-copilot/tests/test_unified_scanner_service.py) (4/4 tests passing; **126/126 total project test suite passing**).
 
-### 5. Enhanced 200 SMA Trend-Following Strategy (NSE Equities & MCX Aluminium)
+### 6. 52-Week High Institutional Exhaustion & Day 2 Intraday MIS Short Strategy ([`docs/STRATEGY_52_WEEK_HIGH_SHORT.md`](file:///Users/aswinkarthik.th/.gemini/antigravity-ide/scratch/quant-copilot/docs/STRATEGY_52_WEEK_HIGH_SHORT.md))
+- **Concept**: Wyckoff Upthrust After Distribution (UTAD) / Institutional Bull Trap short selling strategy.
+  - **Day 1 Climax Discovery (Radar)**: Touches new 52-week high + volume $\ge 3\times$ 20-day average + upper rejection wick $\ge 45\%$ + weak close in bottom 40% of daily range + parabolic extension $\ge 20\%$ above 50 EMA + turnover $\ge ₹50$ Cr liquidity floor.
+  - **Day 2 Breakdown Confirmation (State Machine)**: Intraday MIS short triggers only when morning price cracks Day 1 Climax Low (selling into established weakness rather than picking the top).
+  - **Phase 1 Execution Vehicle**: Cash Intraday MIS (Exit before 03:10 PM, 0% overnight gap risk). Invalidation stop at Day 2 open high or Climax High + 0.3%, Target 1 at -2.0% (book 50%), Target 2 at -4.0% (book 100%).
+  - **Unified Conversational UX**:
+    - `"Whats today for 52"`: Multi-strategy briefing with Section A (High Long), Section B (Low Long), Section C (High Exhaustion Short MIS), and Section D (SEBI PIT Promoter Buying).
+    - `"52 watchlist"`: Automatically renders 3 distinct, dedicated tables (Low, High, Short) without prompting the user.
+    - `"52 portfolio"`: Automatically separates Positional Delivery Long Holdings from Active Intraday MIS Shorts.
+- **Production Modules**:
+  - Models: [`src/scanner/models.py`](file:///Users/aswinkarthik.th/.gemini/antigravity-ide/scratch/quant-copilot/src/scanner/models.py) (`ShortSignalStage`, `ShortExitReason`, `ExhaustionShortSignal`, `ShortWatchlistStock`, `ShortTradeRecord`, `DailyDashboard52Short`).
+  - Technical Scanner: [`src/scanner/short_scanner.py`](file:///Users/aswinkarthik.th/.gemini/antigravity-ide/scratch/quant-copilot/src/scanner/short_scanner.py) (`HighExhaustionShortScanner`).
+  - Portfolio & Watchlist Tracker: [`src/scanner/short_tracker.py`](file:///Users/aswinkarthik.th/.gemini/antigravity-ide/scratch/quant-copilot/src/scanner/short_tracker.py) (`ShortPortfolioTracker` with `data/watchlist_52_short.json` and `data/trade_history_52_short.json`).
+  - Service Facade: [`src/scanner/short_service.py`](file:///Users/aswinkarthik.th/.gemini/antigravity-ide/scratch/quant-copilot/src/scanner/short_service.py) (`ShortScannerService`).
+  - Unified Orchestrator: [`src/scanner/unified_service.py`](file:///Users/aswinkarthik.th/.gemini/antigravity-ide/scratch/quant-copilot/src/scanner/unified_service.py) (`get_unified_daily_briefing()`, `get_unified_watchlist()`, `get_unified_portfolio()`).
+  - Standalone & Unified CLI: [`scripts/run_52_short_scanner.py`](file:///Users/aswinkarthik.th/.gemini/antigravity-ide/scratch/quant-copilot/scripts/run_52_short_scanner.py) and [`scripts/run_52_scanner.py`](file:///Users/aswinkarthik.th/.gemini/antigravity-ide/scratch/quant-copilot/scripts/run_52_scanner.py).
+  - Documentation: [`docs/STRATEGY_52_WEEK_HIGH_SHORT.md`](file:///Users/aswinkarthik.th/.gemini/antigravity-ide/scratch/quant-copilot/docs/STRATEGY_52_WEEK_HIGH_SHORT.md).
+- **Test Suite**: [`tests/test_52_short_scanner.py`](file:///Users/aswinkarthik.th/.gemini/antigravity-ide/scratch/quant-copilot/tests/test_52_short_scanner.py) & [`tests/test_unified_scanner_service.py`](file:///Users/aswinkarthik.th/.gemini/antigravity-ide/scratch/quant-copilot/tests/test_unified_scanner_service.py) (**142/142 total project tests passing**).
+
 - **Concept**: Vectorized and event-driven trend-following engine designed for Indian stock and commodity futures (15m candles). Overcomes the catastrophic ~70% sideways whipsaw trap of raw 200 SMA by introducing 5 institutional filtering layers:
   1. **ATR Dead-Zone Envelope**: $SMA(200) \pm 1.0 \times ATR(14)$. Entries only permitted outside the envelope; early exits allowed at the 200 SMA line to protect profits.
   2. **ADX Regime Gate**: Requires $ADX(14) > 22$ (Equities) or $ADX(14) > 25$ (MCX Aluminium) to filter out flat consolidation.

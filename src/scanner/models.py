@@ -314,3 +314,85 @@ class DailyDashboard52High(BaseModel):
     summary_notes: List[str] = Field(default_factory=list)
 
 
+# -------------------------------------------------------------------------
+# 8. 52-WEEK HIGH EXHAUSTION SHORT MODELS (PHASE 1 - INTRADAY MIS)
+# -------------------------------------------------------------------------
+
+class ShortSignalStage(str, Enum):
+    RADAR_CLIMAX = "RADAR_CLIMAX"       # Day 1: Climax candle detected, added to watch
+    TRIGGERED_MIS = "TRIGGERED_MIS"     # Day 2: Price broke Day 1 low, active short
+    SQUARED_OFF = "SQUARED_OFF"         # Closed before 3:10 PM
+    INVALIDATED = "INVALIDATED"         # Day 2 made higher high instead of breaking low
+
+
+class ShortExitReason(str, Enum):
+    TARGET_1 = "TARGET_1"               # -2% Quick book 50%
+    TARGET_2 = "TARGET_2"               # -4% Full profit book
+    STOP_LOSS = "STOP_LOSS"             # Hit Day 2 open high or Climax high
+    TIME_EXIT_310PM = "TIME_EXIT_310PM" # Intraday mandatory square-off
+    MANUAL = "MANUAL"                   # Manual discretionary exit
+
+
+class ExhaustionShortSignal(BaseModel):
+    """Day 1: Upthrust After Distribution (UTAD) Climax Trap Signal."""
+    symbol: str
+    climax_date: str
+    climax_high: float                  # Invalidation / Hard Stop level
+    climax_low: float                   # Day 2 Entry trigger level
+    climax_close: float
+    today_volume: int
+    avg_volume_20d: float
+    volume_ratio: float                 # >= 3.0x
+    upper_wick_pct: float               # >= 45% of candle range
+    close_position_pct: float           # <= 40% (closed in lower half)
+    parabolic_extension_pct: float      # Distance above 50 EMA (>= 20%)
+    initial_sl: float                   # Climax High + 0.3%
+    target_1_mis: float                 # Climax Low - 2.0%
+    target_2_mis: float                 # Climax Low - 4.0%
+    stage: ShortSignalStage = ShortSignalStage.RADAR_CLIMAX
+
+
+class ShortWatchlistStock(BaseModel):
+    """Tier 1: Stocks that printed a Day 1 Climax trap awaiting Day 2 breakdown trigger."""
+    symbol: str
+    added_date: str
+    climax_date: str
+    trigger_level_low: float            # Break below this initiates Day 2 short
+    invalidation_level_high: float      # Break above this voids the setup
+    target_1_mis: float                 # -2.0%
+    target_2_mis: float                 # -4.0%
+    status: ShortSignalStage = ShortSignalStage.RADAR_CLIMAX
+    notes: Optional[str] = ""
+    history_notes: List[str] = Field(default_factory=list)
+
+    def add_note(self, note: str, timestamp: Optional[str] = None):
+        """Append a timestamped note to the history log."""
+        ts = timestamp or datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M UTC")
+        self.history_notes.append(f"[{ts}] {note}")
+
+
+class ShortTradeRecord(BaseModel):
+    """Tier 3: Record of a completed Intraday MIS Short trade."""
+    symbol: str
+    trade_date: str
+    entry_time: str
+    exit_time: str
+    entry_price: float
+    exit_price: float
+    quantity: int
+    exit_reason: ShortExitReason
+    realized_pnl_inr: float
+    realized_pnl_pct: float
+    notes: Optional[str] = ""
+
+
+class DailyDashboard52Short(BaseModel):
+    """Daily executive briefing payload for 52W High Exhaustion Shorts."""
+    as_of_date: str
+    new_climax_traps: List[ExhaustionShortSignal] = Field(default_factory=list)
+    day2_mis_triggers: List[ShortWatchlistStock] = Field(default_factory=list)
+    active_intraday_shorts: List[ShortWatchlistStock] = Field(default_factory=list)
+    summary_notes: List[str] = Field(default_factory=list)
+
+
+

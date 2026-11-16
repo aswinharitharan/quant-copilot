@@ -9,13 +9,17 @@ from src.scanner.models import (
     ConsolidationBaseMetrics,
     DailyDashboard52,
     DailyDashboard52High,
+    DailyDashboard52Short,
     ExhaustionMetrics,
+    ExhaustionShortSignal,
     FundamentalAudit,
     HighPortfolioStock,
     HighStockStatusBadge,
     HighWatchlistStock,
     InsiderTradeRecord,
     PortfolioStock,
+    ShortSignalStage,
+    ShortWatchlistStock,
     StockStatusBadge,
     WatchlistStock,
 )
@@ -252,3 +256,191 @@ def test_unified_briefing_graceful_error_handling(sample_low_dashboard):
     md = svc.format_unified_briefing_markdown(briefing)
     assert "⚠️ Error: NSE High API Timeout" in md
     assert "## 📉 B. 52-Week LOW — Capitulation Strategy" in md
+
+
+@pytest.fixture
+def sample_short_dashboard():
+    return DailyDashboard52Short(
+        as_of_date="2026-11-13",
+        summary_notes=["Monitored 1 active Day 2 MIS candidate."],
+        day2_mis_triggers=[
+            ShortWatchlistStock(
+                symbol="PARABOLIC",
+                added_date="2026-11-12",
+                climax_date="2026-11-12",
+                trigger_level_low=1000.0,
+                invalidation_level_high=1100.0,
+                target_1_mis=980.0,
+                target_2_mis=960.0,
+                status=ShortSignalStage.TRIGGERED_MIS,
+                trigger_price=998.0,
+            )
+        ],
+        new_climax_traps=[
+            ExhaustionShortSignal(
+                symbol="CLIMAXCO",
+                climax_date="2026-11-13",
+                climax_high=2500.0,
+                climax_low=2380.0,
+                climax_close=2400.0,
+                today_volume=3500000,
+                avg_volume_20d=1000000,
+                volume_ratio=3.5,
+                upper_wick_pct=55.0,
+                close_position_pct=25.0,
+                parabolic_extension_pct=32.0,
+                initial_sl=2507.50,
+                target_1_mis=2332.40,
+                target_2_mis=2284.80,
+                stage=ShortSignalStage.RADAR_CLIMAX,
+            )
+        ],
+    )
+
+
+def test_unified_briefing_all_strategies(sample_low_dashboard, sample_high_dashboard, sample_short_dashboard):
+    mock_low = MagicMock()
+    mock_low.get_daily_briefing.return_value = sample_low_dashboard
+
+    mock_high = MagicMock()
+    mock_high.get_daily_briefing.return_value = sample_high_dashboard
+
+    mock_short = MagicMock()
+    mock_short.get_daily_briefing.return_value = sample_short_dashboard
+
+    svc = UnifiedScannerService(low_service=mock_low, high_service=mock_high, short_service=mock_short)
+    briefing = svc.get_unified_daily_briefing(as_of_date="2026-11-13", strategy="all")
+
+    assert briefing["as_of_date"] == "2026-11-13"
+    assert briefing["low_dashboard"] == sample_low_dashboard
+    assert briefing["high_dashboard"] == sample_high_dashboard
+    assert briefing["short_dashboard"] == sample_short_dashboard
+
+    mock_low.get_daily_briefing.assert_called_once()
+    mock_high.get_daily_briefing.assert_called_once()
+    mock_short.get_daily_briefing.assert_called_once()
+
+    md = svc.format_unified_briefing_markdown(briefing)
+    assert "## 🚀 A. 52-Week HIGH — Breakout Strategy" in md
+    assert "## 📉 B. 52-Week LOW — Capitulation Strategy" in md
+    assert "## 🔻 C. 52-Week HIGH EXHAUSTION — Intraday MIS Strategy (SHORT)" in md
+    assert "PARABOLIC" in md
+    assert "CLIMAXCO" in md
+    assert "## 💼 D. Material Promoter Buying" in md
+
+
+def test_unified_watchlist_multi_table():
+    mock_low = MagicMock()
+    mock_high = MagicMock()
+    mock_short = MagicMock()
+
+    mock_low.tracker.get_watchlist.return_value = [
+        WatchlistStock(
+            symbol="TATACONSUM",
+            added_date="2026-11-10",
+            capitulation_date="2026-11-10",
+            capitulation_low=880.0,
+            capitulation_high=910.0,
+            target_1_20ema=940.0,
+            target_2_50ema=980.0,
+        )
+    ]
+    mock_high.tracker.get_watchlist.return_value = [
+        HighWatchlistStock(
+            symbol="TRENT",
+            added_date="2026-11-10",
+            breakout_date="2026-11-10",
+            breakout_price=7150.0,
+            pivot_high=7200.0,
+            initial_sl=6768.0,
+            trailing_20ema=6900.0,
+            target_1_15pct=8280.0,
+            target_2_30pct=9360.0,
+        )
+    ]
+    mock_short.tracker.get_watchlist.return_value = [
+        ShortWatchlistStock(
+            symbol="PARABOLIC",
+            added_date="2026-11-12",
+            climax_date="2026-11-12",
+            trigger_level_low=1000.0,
+            invalidation_level_high=1100.0,
+            target_1_mis=980.0,
+            target_2_mis=960.0,
+            status=ShortSignalStage.RADAR_CLIMAX,
+        )
+    ]
+
+    svc = UnifiedScannerService(low_service=mock_low, high_service=mock_high, short_service=mock_short)
+    wl_md = svc.get_unified_watchlist(strategy="all")
+
+    assert "# 📋 QuantCopilot: Unified 52-Week Watchlist" in wl_md
+    assert "### 📉 1. 52-Week LOW" in wl_md
+    assert "TATACONSUM" in wl_md
+    assert "### 🚀 2. 52-Week HIGH" in wl_md
+    assert "TRENT" in wl_md
+    assert "### 🔻 3. 52-Week HIGH EXHAUSTION" in wl_md
+    assert "PARABOLIC" in wl_md
+
+
+def test_unified_portfolio_multi_table():
+    mock_low = MagicMock()
+    mock_high = MagicMock()
+    mock_short = MagicMock()
+
+    mock_low.tracker.get_portfolio.return_value = [
+        PortfolioStock(
+            symbol="THERMAX",
+            entry_date="2026-11-05",
+            entry_price=4100.0,
+            total_quantity_bought=25,
+            remaining_quantity=25,
+            current_price=4350.0,
+            capitulation_low=3900.0,
+            unrealized_pnl_pct=6.10,
+            status_badge=StockStatusBadge.SAFE,
+            dist_from_sl_pct=11.5,
+            target_1_20ema=4400.0,
+            target_2_50ema=4650.0,
+        )
+    ]
+    mock_high.tracker.get_portfolio.return_value = [
+        HighPortfolioStock(
+            symbol="HAL",
+            entry_date="2026-11-01",
+            entry_price=4500.0,
+            total_quantity_bought=20,
+            remaining_quantity=20,
+            current_price=4900.0,
+            initial_sl=4230.0,
+            highest_high_since_entry=4920.0,
+            trailing_sl=4650.0,
+            unrealized_pnl_pct=8.89,
+            status_badge=HighStockStatusBadge.SAFE,
+            target_1_15pct=5175.0,
+            target_2_30pct=5850.0,
+        )
+    ]
+    mock_short.tracker.get_watchlist.return_value = [
+        ShortWatchlistStock(
+            symbol="PARABOLIC",
+            added_date="2026-11-12",
+            climax_date="2026-11-12",
+            trigger_level_low=1000.0,
+            invalidation_level_high=1100.0,
+            target_1_mis=980.0,
+            target_2_mis=960.0,
+            status=ShortSignalStage.TRIGGERED_MIS,
+        )
+    ]
+
+    svc = UnifiedScannerService(low_service=mock_low, high_service=mock_high, short_service=mock_short)
+    port_md = svc.get_unified_portfolio(strategy="all")
+
+    assert "# 💼 QuantCopilot: Active 52-Week Portfolio" in port_md
+    assert "### 🟢 Positional Delivery Holdings (LONG)" in port_md
+    assert "THERMAX" in port_md
+    assert "HAL" in port_md
+    assert "### 🔴 Active Intraday MIS Positions (SHORT — Exit before 03:10 PM)" in port_md
+    assert "PARABOLIC" in port_md
+
