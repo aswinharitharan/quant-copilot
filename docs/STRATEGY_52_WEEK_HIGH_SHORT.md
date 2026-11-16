@@ -50,7 +50,21 @@ flowchart TD
 
 ---
 
-## 4. Multi-Table Conversational UX (QuantCopilot Integration)
+## 4. Day 3 Continuation Short Mechanics
+
+What happens when a stock triggers on Day 2, closes heavily in the red, and continues falling on Day 3?
+
+1. **Intraday Square-off at 3:10 PM**: All MIS positions must close before 03:10 PM on Day 2 to maintain 0% overnight risk.
+2. **EOD Continuation Qualification**: At 3:30 PM, if Day 2 closed red (`close < open`), closed below Day 1 Low, and closed in the bottom 45% of its daily range, it qualifies as a **Day 3 Continuation Candidate** (`RADAR_DAY3_CONTINUATION`).
+3. **Day 3 Entry Trigger**: If morning price on Day 3 cracks **Day 2 Low**, a fresh Intraday MIS short is triggered (`TRIGGERED_DAY3_MIS`).
+4. **Day 3 Stop Loss**: Day 2 High (or Day 3 Open High + 0.3%).
+5. **Day 3 Targets**: T1 at -2.0% from Day 2 Low, T2 at -4.0% / Auto-Exit 03:10 PM.
+
+This allows extracting continuous daily alpha without ever carrying unhedged overnight equity short risk!
+
+---
+
+## 5. Multi-Table Conversational UX (QuantCopilot Integration)
 
 QuantCopilot automatically separates and organizes all active strategies without requiring specific prompts:
 

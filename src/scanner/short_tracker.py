@@ -168,6 +168,36 @@ class ShortPortfolioTracker:
                 return stock
         return None
 
+    def rollover_to_day3_continuation(
+        self,
+        symbol: str,
+        day2_low: float,
+        day2_high: float,
+        day2_close: float,
+        note: Optional[str] = None,
+    ) -> Optional[ShortWatchlistStock]:
+        """Rollover a stock that broke down on Day 2 into Day 3 Continuation Watchlist."""
+        clean_sym = symbol.upper()
+        watchlist = self.get_watchlist()
+        for stock in watchlist:
+            if stock.symbol == clean_sym:
+                stock.status = ShortSignalStage.RADAR_DAY3_CONTINUATION
+                stock.is_continuation = True
+                stock.day1_low = stock.trigger_level_low
+                stock.day2_low = day2_low
+                stock.day2_high = day2_high
+                stock.day2_close = day2_close
+                # Day 3 trigger is Day 2 Low!
+                stock.trigger_level_low = day2_low
+                stock.invalidation_level_high = day2_high
+                stock.target_1_mis = round(day2_low * 0.98, 2)
+                stock.target_2_mis = round(day2_low * 0.96, 2)
+                msg = note or f"Rolled over to Day 3 Continuation Short: New trigger below Day 2 Low ₹{day2_low:.2f}, Invalidation ₹{day2_high:.2f}."
+                stock.add_note(msg)
+                self._save_watchlist(watchlist)
+                return stock
+        return None
+
     # -------------------------------------------------------------------------
     # TIER 3: TRADE HISTORY LEDGER
     # -------------------------------------------------------------------------

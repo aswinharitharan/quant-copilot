@@ -186,7 +186,7 @@ def test_unified_multi_table_watchlist():
 
     assert "1. 52-Week LOW (Capitulation Rebounds — LONG)" in wl_md
     assert "2. 52-Week HIGH (Breakout Continuations — LONG)" in wl_md
-    assert "3. 52-Week HIGH EXHAUSTION (Day 2 Intraday MIS — SHORT)" in wl_md
+    assert "3. 52-Week HIGH EXHAUSTION" in wl_md
 
 
 def test_unified_multi_table_portfolio():
@@ -196,3 +196,50 @@ def test_unified_multi_table_portfolio():
 
     assert "Positional Delivery Holdings (LONG)" in port_md
     assert "Active Intraday MIS Positions (SHORT — Exit before 03:10 PM)" in port_md
+
+
+def test_day3_continuation_lifecycle(tmp_path):
+    """Verify Day 2 breakdown rollover to Day 3 Continuation breakdown."""
+    tracker = ShortPortfolioTracker(data_dir=str(tmp_path))
+
+    # Day 1: Add climax stock
+    stock = tracker.add_to_watchlist("FALLCO", climax_low=1000.0, climax_high=1100.0)
+    assert stock.status == ShortSignalStage.RADAR_CLIMAX
+    assert stock.trigger_level_low == 1000.0
+
+    # Day 2: Simulates breaking 1000 and closing at 980 (Low 975, High 1005)
+    day2_bar = pd.DataFrame(
+        [{"open": 1002.0, "high": 1005.0, "low": 975.0, "close": 980.0, "volume": 2000000}],
+        index=[pd.Timestamp("2026-11-14")],
+    )
+
+    stage, px, note = HighExhaustionShortScanner.evaluate_breakdown(stock, day2_bar)
+    assert stage == ShortSignalStage.TRIGGERED_MIS
+    assert px == 999.95
+
+    # Check EOD continuation eligibility
+    eod_stats = HighExhaustionShortScanner.evaluate_eod_continuation(stock, day2_bar)
+    assert eod_stats is not None
+    assert eod_stats["day2_low"] == 975.0
+    assert eod_stats["day2_high"] == 1005.0
+
+    # Roll over to Day 3 Continuation
+    cont_stock = tracker.rollover_to_day3_continuation(
+        "FALLCO",
+        day2_low=eod_stats["day2_low"],
+        day2_high=eod_stats["day2_high"],
+        day2_close=eod_stats["day2_close"],
+    )
+    assert cont_stock.status == ShortSignalStage.RADAR_DAY3_CONTINUATION
+    assert cont_stock.trigger_level_low == 975.0  # Day 3 trigger is Day 2 Low!
+    assert cont_stock.is_continuation is True
+
+    # Day 3: Price cracks 975 (Day 2 low)
+    day3_bar = pd.DataFrame(
+        [{"open": 978.0, "high": 980.0, "low": 960.0, "close": 965.0, "volume": 1500000}],
+        index=[pd.Timestamp("2026-11-15")],
+    )
+    stage3, px3, note3 = HighExhaustionShortScanner.evaluate_breakdown(cont_stock, day3_bar)
+    assert stage3 == ShortSignalStage.TRIGGERED_DAY3_MIS
+    assert px3 == 974.95
+    assert "Day 3 Continuation MIS Short TRIGGERED" in note3

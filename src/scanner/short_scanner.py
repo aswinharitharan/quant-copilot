@@ -317,40 +317,72 @@ class HighExhaustionShortScanner:
         )
 
     # -------------------------------------------------------------------------
-    # STEP 4: DAY 2 INTRADAY BREAKDOWN EVALUATOR
+    # STEP 4: DAY 2 & DAY 3 INTRADAY BREAKDOWN EVALUATOR
     # -------------------------------------------------------------------------
 
     @staticmethod
-    def evaluate_day2_breakdown(
+    def evaluate_breakdown(
         stock: ShortWatchlistStock,
-        day2_df: pd.DataFrame,
+        candle_df: pd.DataFrame,
     ) -> Tuple[ShortSignalStage, Optional[float], str]:
-        """Evaluate whether a Day 1 Climax stock triggered a Day 2 Intraday MIS short.
+        """Evaluate whether a watchlist stock triggered Day 2 initial breakdown or Day 3 continuation short.
         
         Returns:
             Tuple of (NewStage, ExecutionPrice, RationaleNote)
         """
-        if day2_df.empty:
-            return stock.status, None, "No Day 2 price data"
+        if candle_df.empty:
+            return stock.status, None, "No price data"
 
-        d = day2_df.copy()
+        d = candle_df.copy()
         d.columns = [str(c).lower() for c in d.columns]
         last_bar = d.iloc[-1]
 
-        day2_high = float(last_bar["high"])
-        day2_low = float(last_bar["low"])
+        bar_high = float(last_bar["high"])
+        bar_low = float(last_bar["low"])
         trigger_low = stock.trigger_level_low
         invalidation_high = stock.invalidation_level_high
 
-        # 1. Check Invalidation: Day 2 crossed Day 1 High
-        if day2_high >= invalidation_high:
-            note = f"Setup INVALIDATED on Day 2: Price exceeded Climax High (₹{day2_high:.2f} >= ₹{invalidation_high:.2f})."
-            return ShortSignalStage.INVALIDATED, day2_high, note
+        # 1. Check Invalidation: Price exceeded resistance/invalidation high
+        if bar_high >= invalidation_high:
+            note = f"Setup INVALIDATED: Price exceeded invalidation high (₹{bar_high:.2f} >= ₹{invalidation_high:.2f})."
+            return ShortSignalStage.INVALIDATED, bar_high, note
 
-        # 2. Check Breakdown Trigger: Day 2 Low broke Day 1 Low
-        if day2_low <= trigger_low:
+        # 2. Check Breakdown Trigger: Price broke trigger low
+        if bar_low <= trigger_low:
             exec_px = round(trigger_low - 0.05, 2)
-            note = f"Day 2 Intraday MIS Short TRIGGERED @ ₹{exec_px:.2f} (Cracked Day 1 Climax Low ₹{trigger_low:.2f})."
-            return ShortSignalStage.TRIGGERED_MIS, exec_px, note
+            if stock.status == ShortSignalStage.RADAR_DAY3_CONTINUATION or stock.is_continuation:
+                stage = ShortSignalStage.TRIGGERED_DAY3_MIS
+                note = f"Day 3 Continuation MIS Short TRIGGERED @ ₹{exec_px:.2f} (Cracked Day 2 Low ₹{trigger_low:.2f})."
+            else:
+                stage = ShortSignalStage.TRIGGERED_MIS
+                note = f"Day 2 Intraday MIS Short TRIGGERED @ ₹{exec_px:.2f} (Cracked Day 1 Climax Low ₹{trigger_low:.2f})."
+            return stage, exec_px, note
 
-        return ShortSignalStage.RADAR_CLIMAX, None, "Awaiting breakdown below Day 1 Climax Low."
+        target_name = "Day 2" if stock.is_continuation else "Day 1"
+        return stock.status, None, f"Awaiting breakdown below {target_name} Low ₹{trigger_low:.2f}."
+
+    # Backwards-compatible alias for Day 2 evaluations
+    evaluate_day2_breakdown = evaluate_breakdown
+
+    @staticmethod
+    def evaluate_eod_continuation(
+        stock: ShortWatchlistStock,
+        day2_df: pd.DataFrame,
+    ) -> Optional[Dict[str, float]]:
+        """At Day 2 EOD (3:30 PM), check if Day 2 closed weak enough to warrant Day 3 continuation short."""
+        if day2_df.empty:
+            return None
+        d = day2_df.copy()
+        d.columns = [str(c).lower() for c in d.columns]
+        last_bar = d.iloc[-1]
+        c = float(last_bar["close"])
+        o = float(last_bar["open"])
+        h = float(last_bar["high"])
+        l = float(last_bar["low"])
+
+        # Continuation criteria: closed red (close <= open), closed below trigger level, and weak close in lower 45% of range
+        rng = max(0.01, h - l)
+        close_pos = (c - l) / rng
+        if c <= o and c <= stock.trigger_level_low and close_pos <= 0.45:
+            return {"day2_low": l, "day2_high": h, "day2_close": c}
+        return None

@@ -296,18 +296,24 @@ class UnifiedScannerService:
             md.append("## 🔻 C. 52-Week HIGH EXHAUSTION — Intraday MIS Strategy (SHORT)")
             md.append("")
 
-            # C.1 Day 2 Action Triggers
-            md.append("### 🔥 C.1 Day 2 Intraday MIS Triggers (Actionable Today)")
-            if short_db.day2_mis_triggers:
-                md.append("| Symbol | Trigger Px (Day 1 Low) | Hard Invalidation | Target 1 (-2%) | Target 2 (-4%) | Status |")
-                md.append("| :--- | :--- | :--- | :--- | :--- | :--- |")
+            # C.1 Day 2 & Day 3 Action Triggers
+            md.append("### 🔥 C.1 Intraday MIS Breakdown Triggers (Actionable Today)")
+            all_triggers = short_db.day2_mis_triggers + short_db.day3_continuation_triggers
+            if all_triggers:
+                md.append("| Symbol | Mode | Trigger Px | Hard Invalidation | Target 1 (-2%) | Target 2 (-4%) | Status |")
+                md.append("| :--- | :--- | :--- | :--- | :--- | :--- | :--- |")
                 for item in short_db.day2_mis_triggers:
                     md.append(
-                        f"| **{item.symbol}** | ₹{item.trigger_level_low:.2f} | ₹{item.invalidation_level_high:.2f} | "
-                        f"₹{item.target_1_mis:.2f} | ₹{item.target_2_mis:.2f} | 🔴 **TRIGGERED MIS** |"
+                        f"| **{item.symbol}** | Day 2 Initial | ₹{item.trigger_level_low:.2f} (Day 1 Low) | ₹{item.invalidation_level_high:.2f} | "
+                        f"₹{item.target_1_mis:.2f} | ₹{item.target_2_mis:.2f} | 🔴 **DAY 2 MIS** |"
+                    )
+                for item in short_db.day3_continuation_triggers:
+                    md.append(
+                        f"| **{item.symbol}** | Day 3 Continuation | ₹{item.trigger_level_low:.2f} (Day 2 Low) | ₹{item.invalidation_level_high:.2f} | "
+                        f"₹{item.target_1_mis:.2f} | ₹{item.target_2_mis:.2f} | ⚡ **DAY 3 CONT** |"
                     )
             else:
-                md.append("*No watchlist stocks triggered Day 2 Intraday MIS breakdown today.*")
+                md.append("*No watchlist stocks triggered Day 2 or Day 3 Intraday MIS breakdown today.*")
             md.append("")
 
             # C.2 Day 1 Climax Traps on Radar
@@ -407,15 +413,16 @@ class UnifiedScannerService:
 
         # Table 3: 52-Week High Exhaustion Short
         if strategy in ("all", "short"):
-            lines.append("### 🔻 3. 52-Week HIGH EXHAUSTION (Day 2 Intraday MIS — SHORT)")
-            lines.append("*Monitoring for morning breakdown below Day 1 Climax Low:*")
+            lines.append("### 🔻 3. 52-Week HIGH EXHAUSTION (Day 2 & Day 3 Intraday MIS — SHORT)")
+            lines.append("*Monitoring for breakdown below Day 1 Climax Low or Day 2 Continuation Low:*")
             short_wl = self.short.tracker.get_watchlist()
             if short_wl:
-                lines.append("| Symbol | Day 1 Climax Low (Sell Trigger) | Hard Invalidation | Target 1 (-2%) | Target 2 (-4%) | Status |")
-                lines.append("| :--- | :--- | :--- | :--- | :--- | :--- |")
+                lines.append("| Symbol | Mode | Sell Trigger Level | Hard Invalidation | Target 1 (-2%) | Target 2 (-4%) | Status |")
+                lines.append("| :--- | :--- | :--- | :--- | :--- | :--- | :--- |")
                 for s in short_wl:
+                    mode_str = "Day 3 Continuation" if s.is_continuation else "Day 2 Initial"
                     lines.append(
-                        f"| **{s.symbol}** | **₹{s.trigger_level_low:.2f}** | ₹{s.invalidation_level_high:.2f} | "
+                        f"| **{s.symbol}** | {mode_str} | **₹{s.trigger_level_low:.2f}** | ₹{s.invalidation_level_high:.2f} | "
                         f"₹{s.target_1_mis:.2f} | ₹{s.target_2_mis:.2f} | {s.status.value} |"
                     )
             else:

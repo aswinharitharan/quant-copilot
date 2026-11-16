@@ -91,20 +91,21 @@ class ShortScannerService:
             except Exception as e:
                 logger.warning(f"Error scanning {sym} for short climax: {e}")
 
-        # 2. Evaluate Day 2 Breakdown Triggers on Existing Watchlist
+        # 2. Evaluate Day 2 & Day 3 Breakdown Triggers on Existing Watchlist
         watchlist = self.tracker.get_watchlist()
         day2_triggers: List[ShortWatchlistStock] = []
+        day3_triggers: List[ShortWatchlistStock] = []
         active_shorts: List[ShortWatchlistStock] = []
 
         for stock in watchlist:
-            if stock.status == ShortSignalStage.TRIGGERED_MIS:
+            if stock.status in (ShortSignalStage.TRIGGERED_MIS, ShortSignalStage.TRIGGERED_DAY3_MIS):
                 active_shorts.append(stock)
                 continue
 
-            day2_df = current_day2_dfs.get(stock.symbol)
-            if day2_df is None and self.scanner.cache_manager is not None:
+            day_df = current_day2_dfs.get(stock.symbol)
+            if day_df is None and self.scanner.cache_manager is not None:
                 try:
-                    day2_df = self.scanner.cache_manager.get_candles(
+                    day_df = self.scanner.cache_manager.get_candles(
                         symbol=stock.symbol,
                         exchange="NSE",
                         interval="1d",
@@ -112,17 +113,20 @@ class ShortScannerService:
                         end_date=dt_str,
                     )
                 except Exception:
-                    day2_df = None
+                    day_df = None
 
-            if day2_df is not None and not day2_df.empty:
-                stage, exec_px, note = self.scanner.evaluate_day2_breakdown(stock, day2_df)
+            if day_df is not None and not day_df.empty:
+                stage, exec_px, note = self.scanner.evaluate_breakdown(stock, day_df)
                 if stage == ShortSignalStage.TRIGGERED_MIS:
                     self.tracker.update_stock_status(stock.symbol, stage, note)
                     stock.status = stage
                     day2_triggers.append(stock)
+                elif stage == ShortSignalStage.TRIGGERED_DAY3_MIS:
+                    self.tracker.update_stock_status(stock.symbol, stage, note)
+                    stock.status = stage
+                    day3_triggers.append(stock)
                 elif stage == ShortSignalStage.INVALIDATED:
                     self.tracker.update_stock_status(stock.symbol, stage, note)
-                    # Clean up invalidated stocks
                     self.tracker.remove_from_watchlist(stock.symbol)
 
         summary_notes = []
@@ -133,11 +137,14 @@ class ShortScannerService:
 
         if day2_triggers:
             summary_notes.append(f"🔥 {len(day2_triggers)} Day 2 Intraday MIS Short triggers active today!")
+        if day3_triggers:
+            summary_notes.append(f"⚡ {len(day3_triggers)} Day 3 Continuation MIS Short triggers active today!")
 
         return DailyDashboard52Short(
             as_of_date=dt_str,
             new_climax_traps=new_traps,
             day2_mis_triggers=day2_triggers,
+            day3_continuation_triggers=day3_triggers,
             active_intraday_shorts=active_shorts,
             summary_notes=summary_notes,
         )
@@ -151,22 +158,28 @@ class ShortScannerService:
         lines = [
             f"# 🔻 52-Week High Exhaustion Short Briefing — {dashboard.as_of_date}",
             "",
-            "> **Strategy**: Wyckoff UTAD Bull Trap -> Day 2 Intraday MIS Short (Exit before 3:10 PM)",
+            "> **Strategy**: Wyckoff UTAD Bull Trap -> Day 2 & Day 3 Intraday MIS Short (Exit before 3:10 PM)",
             "",
         ]
 
-        # Section 1: Day 2 Action Triggers
-        lines.append("### 🔥 1. Day 2 Intraday MIS Short Triggers (Actionable Today)")
-        if dashboard.day2_mis_triggers:
-            lines.append("| Symbol | Trigger Px (Day 1 Low) | Hard Invalidation | Target 1 (-2%) | Target 2 (-4%) | Status |")
-            lines.append("| :--- | :--- | :--- | :--- | :--- | :--- |")
+        # Section 1: Day 2 & Day 3 Action Triggers
+        lines.append("### 🔥 1. Intraday MIS Short Triggers (Actionable Today)")
+        all_triggers = dashboard.day2_mis_triggers + dashboard.day3_continuation_triggers
+        if all_triggers:
+            lines.append("| Symbol | Mode | Trigger Level | Hard Invalidation | Target 1 (-2%) | Target 2 (-4%) | Status |")
+            lines.append("| :--- | :--- | :--- | :--- | :--- | :--- | :--- |")
             for item in dashboard.day2_mis_triggers:
                 lines.append(
-                    f"| **{item.symbol}** | ₹{item.trigger_level_low:.2f} | ₹{item.invalidation_level_high:.2f} | "
-                    f"₹{item.target_1_mis:.2f} | ₹{item.target_2_mis:.2f} | 🔴 **TRIGGERED** |"
+                    f"| **{item.symbol}** | Day 2 Breakdown | ₹{item.trigger_level_low:.2f} (Day 1 Low) | "
+                    f"₹{item.invalidation_level_high:.2f} | ₹{item.target_1_mis:.2f} | ₹{item.target_2_mis:.2f} | 🔴 **DAY 2 MIS** |"
+                )
+            for item in dashboard.day3_continuation_triggers:
+                lines.append(
+                    f"| **{item.symbol}** | Day 3 Continuation | ₹{item.trigger_level_low:.2f} (Day 2 Low) | "
+                    f"₹{item.invalidation_level_high:.2f} | ₹{item.target_1_mis:.2f} | ₹{item.target_2_mis:.2f} | ⚡ **DAY 3 CONT** |"
                 )
         else:
-            lines.append("*No watchlist stocks triggered Day 2 Intraday MIS breakdown today.*")
+            lines.append("*No watchlist stocks triggered Day 2 or Day 3 Intraday MIS breakdown today.*")
         lines.append("")
 
         # Section 2: Day 1 Climax Traps (Tomorrow's Watchlist)
@@ -191,7 +204,8 @@ class ShortScannerService:
             lines.append("| Symbol | Short Trigger | Invalidation SL | Target 1 | Target 2 | Action |")
             lines.append("| :--- | :--- | :--- | :--- | :--- | :--- |")
             for s in dashboard.active_intraday_shorts:
-                lines.append(f"| **{s.symbol}** | ₹{s.trigger_level_low:.2f} | ₹{s.invalidation_level_high:.2f} | ₹{s.target_1_mis:.2f} | ₹{s.target_2_mis:.2f} | Active MIS |")
+                mode_str = "Day 3 Cont" if s.is_continuation else "Day 2 MIS"
+                lines.append(f"| **{s.symbol}** | ₹{s.trigger_level_low:.2f} ({mode_str}) | ₹{s.invalidation_level_high:.2f} | ₹{s.target_1_mis:.2f} | ₹{s.target_2_mis:.2f} | Active MIS |")
             lines.append("")
 
         return "\n".join(lines)

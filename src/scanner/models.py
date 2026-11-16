@@ -319,10 +319,12 @@ class DailyDashboard52High(BaseModel):
 # -------------------------------------------------------------------------
 
 class ShortSignalStage(str, Enum):
-    RADAR_CLIMAX = "RADAR_CLIMAX"       # Day 1: Climax candle detected, added to watch
-    TRIGGERED_MIS = "TRIGGERED_MIS"     # Day 2: Price broke Day 1 low, active short
-    SQUARED_OFF = "SQUARED_OFF"         # Closed before 3:10 PM
-    INVALIDATED = "INVALIDATED"         # Day 2 made higher high instead of breaking low
+    RADAR_CLIMAX = "RADAR_CLIMAX"                   # Day 1: Climax candle detected, watching Day 1 low
+    TRIGGERED_MIS = "TRIGGERED_MIS"                 # Day 2: Price broke Day 1 low, active initial short
+    RADAR_DAY3_CONTINUATION = "RADAR_DAY3_CONTINUATION" # Day 2 closed weak below Day 1 low; watching Day 2 low for Day 3 continuation
+    TRIGGERED_DAY3_MIS = "TRIGGERED_DAY3_MIS"       # Day 3: Price broke Day 2 low, active continuation short
+    SQUARED_OFF = "SQUARED_OFF"                     # Closed before 3:10 PM
+    INVALIDATED = "INVALIDATED"                     # Made higher high instead of breaking low
 
 
 class ShortExitReason(str, Enum):
@@ -353,15 +355,20 @@ class ExhaustionShortSignal(BaseModel):
 
 
 class ShortWatchlistStock(BaseModel):
-    """Tier 1: Stocks that printed a Day 1 Climax trap awaiting Day 2 breakdown trigger."""
+    """Tier 1: Stocks that printed a Day 1 Climax trap awaiting Day 2 or Day 3 breakdown trigger."""
     symbol: str
     added_date: str
     climax_date: str
-    trigger_level_low: float            # Break below this initiates Day 2 short
+    trigger_level_low: float            # Break below this initiates short (Day 1 Low or Day 2 Low)
     invalidation_level_high: float      # Break above this voids the setup
     target_1_mis: float                 # -2.0%
     target_2_mis: float                 # -4.0%
     status: ShortSignalStage = ShortSignalStage.RADAR_CLIMAX
+    day1_low: Optional[float] = None
+    day2_low: Optional[float] = None
+    day2_high: Optional[float] = None
+    day2_close: Optional[float] = None
+    is_continuation: bool = False
     notes: Optional[str] = ""
     history_notes: List[str] = Field(default_factory=list)
 
@@ -391,6 +398,7 @@ class DailyDashboard52Short(BaseModel):
     as_of_date: str
     new_climax_traps: List[ExhaustionShortSignal] = Field(default_factory=list)
     day2_mis_triggers: List[ShortWatchlistStock] = Field(default_factory=list)
+    day3_continuation_triggers: List[ShortWatchlistStock] = Field(default_factory=list)
     active_intraday_shorts: List[ShortWatchlistStock] = Field(default_factory=list)
     summary_notes: List[str] = Field(default_factory=list)
 
