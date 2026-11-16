@@ -424,3 +424,27 @@ def test_fetch_nse_52w_low_cache_ttl_and_timestamp_manipulation(tmp_path: Path, 
     assert "NEW_SYMBOL" in res2
 
 
+def test_illiquid_ghost_stock_rejected_by_liquidity_floor():
+    """Verify that an illiquid stock with high relative volume ratio (e.g. 45 shares vs 9 avg)
+    is completely rejected by the absolute institutional liquidity floor."""
+    scanner = LowCapitulationScanner(
+        screener_client=MockScreenerClient(passed=True),
+        insider_feed=MockInsiderFeed(has_material_buy=False),
+    )
+    # Generate illiquid candles: baseline 9 shares, anomaly 45 shares (5x ratio), price ₹10,000 (~₹4.5L turnover)
+    df = generate_synthetic_candles(
+        n_bars=260,
+        base_price=10000.0,
+        downtrend=True,
+        anomaly_on_last_bar=True,
+        volume_multiplier=5.0,
+    )
+    # Force volumes to illiquid levels (9 shares baseline, 45 shares last bar)
+    df["volume"] = 9
+    df.iloc[-1, df.columns.get_loc("volume")] = 45
+
+    signal = scanner.scan_candidate(symbol="ILLIQUID_GHOST", df=df)
+    assert signal is None, "Illiquid ghost stock should be strictly rejected by the liquidity floor!"
+
+
+

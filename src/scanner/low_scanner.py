@@ -35,6 +35,8 @@ logger = logging.getLogger(__name__)
 NSE_CACHE_TTL: int = 7200  # 2 hours in seconds
 CAPITULATION_TOLERANCE: float = 0.005  # 0.5% tolerance near 52W low
 VOLUME_ANOMALY_FACTOR: float = 3.0  # 3.0x 20-day SMA volume surge
+MIN_AVG_DAILY_VOLUME: int = 5_000  # Minimum 5,000 shares/day average volume (prevents ghost stocks)
+MIN_DAILY_TURNOVER_INR: float = 50_00_000.0  # Minimum ₹50 Lakhs daily turnover gate
 
 _RANDOM_UAS: List[str] = [
     "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
@@ -248,11 +250,15 @@ class LowCapitulationScanner:
         ema50 = float(d["close"].ewm(span=50, adjust=False).mean().iloc[-1])
 
         last_bar = d.iloc[-1]
+        today_turnover = float(vol_today * float(last_bar["close"]))
+        avg_turnover = float(vol_sma20 * float(last_bar["close"]))
 
         return {
             "low_52w": float(low_52w),
             "vol_sma20": float(vol_sma20),
             "today_volume": int(vol_today),
+            "today_turnover": today_turnover,
+            "avg_turnover": avg_turnover,
             "volume_ratio": float(vol_ratio),
             "max_vol_ratio_5d": float(max_vol_ratio_5d),
             "min_low_5d": float(min_low_5d),
@@ -343,6 +349,17 @@ class LowCapitulationScanner:
         max_vol_ratio_5d = tech.get("max_vol_ratio_5d", vol_ratio)
 
         if vol_ratio < VOLUME_ANOMALY_FACTOR and max_vol_ratio_5d < VOLUME_ANOMALY_FACTOR:
+            return None
+
+        # 4b. Technical Rule 3: Absolute Liquidity Floor (Prevents illiquid ghost stocks / false anomalies)
+        avg_vol = tech["vol_sma20"]
+        today_turnover = tech.get("today_turnover", 0.0)
+        avg_turnover = tech.get("avg_turnover", 0.0)
+        if avg_vol < MIN_AVG_DAILY_VOLUME or (today_turnover < MIN_DAILY_TURNOVER_INR and avg_turnover < MIN_DAILY_TURNOVER_INR):
+            logger.info(
+                f"{clean_sym} rejected by liquidity floor: avg_vol={avg_vol:.0f} (need >= {MIN_AVG_DAILY_VOLUME}), "
+                f"turnover=₹{today_turnover/1e5:.1f}L (need >= ₹{MIN_DAILY_TURNOVER_INR/1e5:.1f}L)"
+            )
             return None
 
         # Effective volume anomaly for display

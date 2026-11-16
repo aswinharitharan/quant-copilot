@@ -45,6 +45,8 @@ MAX_ATR_CONTRACTION_RATIO: float = 0.80  # ATR at breakout <= 80% of ATR at base
 TARGET_1_PCT: float = 0.15  # +15% Target 1
 TARGET_2_PCT: float = 0.30  # +30% Target 2
 MAX_INITIAL_SL_PCT: float = 0.06  # Maximum 6% initial stop loss buffer
+MIN_AVG_DAILY_VOLUME: int = 5_000  # Minimum 5,000 shares/day average volume (prevents ghost stocks)
+MIN_DAILY_TURNOVER_INR: float = 50_00_000.0  # Minimum ₹50 Lakhs daily turnover gate
 
 _RANDOM_UAS: List[str] = [
     "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
@@ -268,12 +270,16 @@ class HighBreakoutScanner:
         atr14 = float(atr14_series.iloc[-1])
 
         last_bar = d.iloc[-1]
+        today_turnover = float(vol_today * float(last_bar["close"]))
+        avg_turnover = float(vol_sma20 * float(last_bar["close"]))
 
         return {
             "prior_52w_high": prior_52w_high,
             "high_52w": high_52w,
             "vol_sma20": vol_sma20,
             "today_volume": int(vol_today),
+            "today_turnover": today_turnover,
+            "avg_turnover": avg_turnover,
             "volume_ratio": vol_ratio,
             "max_vol_ratio_5d": max_vol_ratio_5d,
             "max_high_5d": max_high_5d,
@@ -515,6 +521,17 @@ class HighBreakoutScanner:
         )
 
         if not is_52w_high:
+            return None
+
+        # 3b. Absolute Liquidity Floor (Prevents illiquid ghost stocks / false breakouts)
+        avg_vol = tech["vol_sma20"]
+        today_turnover = tech.get("today_turnover", 0.0)
+        avg_turnover = tech.get("avg_turnover", 0.0)
+        if avg_vol < MIN_AVG_DAILY_VOLUME or (today_turnover < MIN_DAILY_TURNOVER_INR and avg_turnover < MIN_DAILY_TURNOVER_INR):
+            logger.info(
+                f"{clean_sym} rejected by liquidity floor: avg_vol={avg_vol:.0f} (need >= {MIN_AVG_DAILY_VOLUME}), "
+                f"turnover=₹{today_turnover/1e5:.1f}L (need >= ₹{MIN_DAILY_TURNOVER_INR/1e5:.1f}L)"
+            )
             return None
 
         # 4. Layer 2 Check: Consolidation Base / VCP Check

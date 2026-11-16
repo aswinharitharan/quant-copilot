@@ -1,8 +1,8 @@
 # QuantCopilot Living Status & Context Registry
 
 > **Purpose**: Read this file at the start of any new chat session to instantly restore full project context with minimal token usage.  
-> **Last Updated**: 2026-11-15  
-> **Current Active Phase**: Phase 1 (Core Quant & Execution Engine) + 52-Week Low/High Unified Orchestrator Complete + 200 SMA Enhanced Verified on NSE Equities & MCX Aluminium (+₹10.60L Alpha); 131/131 tests passing  
+> **Last Updated**: 2026-11-16  
+> **Current Active Phase**: Phase 1 (Core Quant & Execution Engine) + 52-Week Low/High Unified Orchestrator Complete with Institutional Liquidity Floor + 200 SMA Enhanced Verified on NSE Equities & MCX Aluminium (+₹10.60L Alpha); 132/132 tests passing  
 
 ---
 
@@ -100,6 +100,13 @@
       3. *High Efficiency*: Kaufman Efficiency Ratio (KER 60) > 0.18–0.35 (smooth directional thrusts).
       4. *Volatility Headroom*: Daily ATR% > 2.5% (or 15m ATR% > 0.45%) so gains comfortably swamp transaction friction.
     - Empirical 192-stock Nifty 200 screen completed in `data/reports/nifty200_trend_efficiency_ranking.csv` and documented in `STOCK_SELECTION_GUIDE.md` (Top picks: DIVISLAB, MCX, BHEL, MOTHERSON, OFSS, LAURUSLABS).
+
+15. **Absolute Institutional Liquidity Floor & Turnover Gate (52W Scanners)**
+    - Relative volume anomaly filters ($\ge 3\times$ SMA volume) suffer from a critical "low denominator" vulnerability on illiquid micro-caps / ghost stocks (e.g. 45 shares vs 9 share baseline $= 5\times$ anomaly, but only ₹5 Lakhs daily turnover).
+    - Enforces hard automated liquidity firewalls across both `LowCapitulationScanner` and `HighBreakoutScanner`:
+      - **`MIN_AVG_DAILY_VOLUME = 5,000`** shares/day minimum baseline.
+      - **`MIN_DAILY_TURNOVER_INR = ₹50,00,000`** (₹50 Lakhs) minimum turnover on anomaly or average day.
+    - Eliminates untradeable illiquid traps from ever reaching user radar, watchlist, or portfolio prompts.
 
 ---
 
