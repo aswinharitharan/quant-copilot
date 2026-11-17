@@ -57,9 +57,18 @@ class HighExhaustionShortScanner:
         cache_manager: Optional[Any] = None,
         cache_dir: str = "data/cache",
     ):
-        self.cache_manager = cache_manager
         self.cache_dir = Path(cache_dir)
         self.cache_dir.mkdir(parents=True, exist_ok=True)
+
+        if cache_manager is None:
+            try:
+                from src.engine.smart_cache import SmartCacheManager
+                self.cache_manager = SmartCacheManager(cache_dir=cache_dir, default_provider="yfinance")
+            except Exception as e:
+                logger.warning(f"Could not initialize default SmartCacheManager: {e}")
+                self.cache_manager = None
+        else:
+            self.cache_manager = cache_manager
 
     # -------------------------------------------------------------------------
     # STEP 1: BROAD 52W-HIGH DISCOVERY
@@ -232,15 +241,22 @@ class HighExhaustionShortScanner:
         if df is None:
             if self.cache_manager is None:
                 raise ValueError("No DataFrame provided and no cache_manager configured.")
-            end_d = as_of_date or datetime.now(timezone.utc).strftime("%Y-%m-%d")
-            start_d = (pd.to_datetime(end_d) - pd.Timedelta(days=500)).strftime("%Y-%m-%d")
-            df = self.cache_manager.get_candles(
-                symbol=clean_sym,
-                exchange="NSE",
-                interval="1d",
-                start_date=start_d,
-                end_date=end_d,
-            )
+            if as_of_date:
+                end_d = as_of_date
+                start_d = (pd.to_datetime(end_d) - pd.Timedelta(days=500)).strftime("%Y-%m-%d")
+                df = self.cache_manager.get_candles(
+                    symbol=clean_sym,
+                    exchange="NSE",
+                    interval="1d",
+                    start_date=start_d,
+                    end_date=end_d,
+                )
+            else:
+                df = self.cache_manager.get_candles(
+                    symbol=clean_sym,
+                    exchange="NSE",
+                    interval="1d",
+                )
 
         if df is None or len(df) < 20:
             return None
