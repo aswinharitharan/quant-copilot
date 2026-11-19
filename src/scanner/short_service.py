@@ -96,6 +96,7 @@ class ShortScannerService:
         day2_triggers: List[ShortWatchlistStock] = []
         day3_triggers: List[ShortWatchlistStock] = []
         active_shorts: List[ShortWatchlistStock] = []
+        pending_watchlist: List[ShortWatchlistStock] = []
 
         for stock in watchlist:
             if stock.status in (ShortSignalStage.TRIGGERED_MIS, ShortSignalStage.TRIGGERED_DAY3_MIS):
@@ -128,6 +129,10 @@ class ShortScannerService:
                 elif stage == ShortSignalStage.INVALIDATED:
                     self.tracker.update_stock_status(stock.symbol, stage, note)
                     self.tracker.remove_from_watchlist(stock.symbol)
+                else:
+                    pending_watchlist.append(stock)
+            else:
+                pending_watchlist.append(stock)
 
         summary_notes = []
         if new_traps:
@@ -139,6 +144,8 @@ class ShortScannerService:
             summary_notes.append(f"🔥 {len(day2_triggers)} Day 2 Intraday MIS Short triggers active today!")
         if day3_triggers:
             summary_notes.append(f"⚡ {len(day3_triggers)} Day 3 Continuation MIS Short triggers active today!")
+        if pending_watchlist:
+            summary_notes.append(f"⏳ {len(pending_watchlist)} stocks on Watchlist awaiting breakdown trigger.")
 
         return DailyDashboard52Short(
             as_of_date=dt_str,
@@ -146,6 +153,7 @@ class ShortScannerService:
             day2_mis_triggers=day2_triggers,
             day3_continuation_triggers=day3_triggers,
             active_intraday_shorts=active_shorts,
+            pending_watchlist=pending_watchlist,
             summary_notes=summary_notes,
         )
 
@@ -182,8 +190,22 @@ class ShortScannerService:
             lines.append("*No watchlist stocks triggered Day 2 or Day 3 Intraday MIS breakdown today.*")
         lines.append("")
 
-        # Section 2: Day 1 Climax Traps (Tomorrow's Watchlist)
-        lines.append("### 📡 2. Fresh Day 1 Climax Traps (Watch for Tomorrow Morning)")
+        # Section 2: Active Watchlist Awaiting Breakdown Trigger
+        if getattr(dashboard, "pending_watchlist", None):
+            lines.append("### ⏳ 2. Active Short Watchlist (Awaiting Breakdown Trigger Today)")
+            lines.append("| Symbol | Mode | Sell Trigger Level | Hard Invalidation | Target 1 (-2%) | Target 2 (-4%) | Status |")
+            lines.append("| :--- | :--- | :--- | :--- | :--- | :--- | :--- |")
+            for item in dashboard.pending_watchlist:
+                mode_str = "Day 3 Continuation" if item.is_continuation else "Day 2 Initial"
+                ref_str = "Day 2 Low" if item.is_continuation else "Day 1 Low"
+                lines.append(
+                    f"| **{item.symbol}** | {mode_str} | **₹{item.trigger_level_low:.2f}** ({ref_str}) | "
+                    f"₹{item.invalidation_level_high:.2f} | ₹{item.target_1_mis:.2f} | ₹{item.target_2_mis:.2f} | ⏳ Awaiting < ₹{item.trigger_level_low:.2f} |"
+                )
+            lines.append("")
+
+        # Section 3: Day 1 Climax Traps (Tomorrow's Watchlist)
+        lines.append("### 📡 3. Fresh Day 1 Climax Traps (Watch for Tomorrow Morning)")
         if dashboard.new_climax_traps:
             lines.append("| Symbol | 52W High | Day Low (Sell Trigger) | Vol Surge | Upper Wick | Parabolic 50 EMA | Action |")
             lines.append("| :--- | :--- | :--- | :--- | :--- | :--- | :--- |")

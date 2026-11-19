@@ -316,8 +316,22 @@ class UnifiedScannerService:
                 md.append("*No watchlist stocks triggered Day 2 or Day 3 Intraday MIS breakdown today.*")
             md.append("")
 
-            # C.2 Day 1 Climax Traps on Radar
-            md.append("### 📡 C.2 Day 1 Climax Traps on Radar (Watch for Tomorrow Morning)")
+            # C.2 Active Watchlist Awaiting Breakdown Trigger Today
+            if getattr(short_db, "pending_watchlist", None):
+                md.append("### ⏳ C.2 Active Short Watchlist (Awaiting Breakdown Trigger Today)")
+                md.append("| Symbol | Mode | Sell Trigger Level | Hard Invalidation | Target 1 (-2%) | Target 2 (-4%) | Status |")
+                md.append("| :--- | :--- | :--- | :--- | :--- | :--- | :--- |")
+                for item in short_db.pending_watchlist:
+                    mode_str = "Day 3 Continuation" if item.is_continuation else "Day 2 Initial"
+                    ref_str = "Day 2 Low" if item.is_continuation else "Day 1 Low"
+                    md.append(
+                        f"| **{item.symbol}** | {mode_str} | **₹{item.trigger_level_low:.2f}** ({ref_str}) | "
+                        f"₹{item.invalidation_level_high:.2f} | ₹{item.target_1_mis:.2f} | ₹{item.target_2_mis:.2f} | ⏳ Awaiting < ₹{item.trigger_level_low:.2f} |"
+                    )
+                md.append("")
+
+            # C.3 Day 1 Climax Traps on Radar
+            md.append("### 📡 C.3 Day 1 Climax Traps on Radar (Watch for Tomorrow Morning)")
             if short_db.new_climax_traps:
                 md.append("| Symbol | 52W High | Day Low (Sell Trigger) | Vol Surge | Upper Wick | Parabolic 50 EMA | Action |")
                 md.append("| :--- | :--- | :--- | :--- | :--- | :--- | :--- |")

@@ -400,6 +400,7 @@ class DailyDashboard52Short(BaseModel):
     day2_mis_triggers: List[ShortWatchlistStock] = Field(default_factory=list)
     day3_continuation_triggers: List[ShortWatchlistStock] = Field(default_factory=list)
     active_intraday_shorts: List[ShortWatchlistStock] = Field(default_factory=list)
+    pending_watchlist: List[ShortWatchlistStock] = Field(default_factory=list)
     summary_notes: List[str] = Field(default_factory=list)
 
 
