@@ -75,11 +75,11 @@ Before any strategy transitions from Backtested to Deployed (Paper or Live), the
 5. **Smart Execution Buffer**: Immediate-Fill Limit orders (0.5%-1% buffer) adhering to Indian exchange rules on NSE/MCX.
 6. **Market Open Buffer**: First trade condition check delayed to 09:20 IST to avoid 09:15 AM opening spread anomalies.
 
-### Module D: The Risk Sentinel (The Uncompromising Guardian)
-Before any order reaches the broker or paper trade book, it passes through the Sentinel:
-1. **Max Daily Loss Limit**: If current day realized + unrealized PnL drops below `-X%` or `-₹Y`, all active positions are squared off and trading is locked for the remainder of the session.
-2. **Max Position Limit**: Caps total capital exposure.
-3. **Hard Emergency Kill-Switch**: A single atomic command/button that cancels open orders, closes active positions at market price, and disconnects the runner.
+### Module D: The Lean Risk Sentinel (Account Airbag & Master Kill-Switch)
+To keep strategy logic completely decoupled and autonomous, all trade-specific rules (cooldowns, indicators, trailing stops, strategy-level exits) live strictly inside the individual strategies. The Sentinel acts exclusively as the **Account-Level Emergency Airbag**:
+1. **Master Emergency Kill-Switch (`kill_all()` / `/kill`)**: Atomic panic command that cancels all open orders on the broker, flattens all open positions across the entire account at market price, and disconnects the runner.
+2. **Automated Loss Airbag (`max_daily_loss` tripwire)**: Configurable threshold (INR or % of margin, e.g. ₹3,500 / 5% on MCX Aluminium Mini Lot). Automatically trips the Master Kill-Switch if total account daily loss breaches this limit while the user is away from screen.
+3. **Session Latch & Morning Auto-Reset**: Locks trading for the remainder of today's session to prevent revenge bleeding; resets automatically at 08:30 AM next morning for the new trading day (with manual CLI/Telegram `--unlock` override).
 
 ### Module D: Broker Adapter Architecture
 Abstract base class:

@@ -155,10 +155,13 @@ We execute Phase 1 in clear, self-contained chunks:
      - `src/brokers/paper_broker.py`: Virtual ledger, simulated margin accounting, instant/limit order matching against live or replay ticks, realistic slippage modeling, and transaction cost deduction.
      - Tests: `tests/test_paper_broker.py` (unit testing fills, margin limits, cancel/modify, and position tracking).
      - *Dependency: 100% local, zero external credentials or cloud accounts required.*
-   - **Step 2D.2: Institutional Risk Sentinel (The Guardian)**
-     - `src/risk/sentinel.py`: Broker proxy decorator that inspects every outgoing order before it reaches any broker.
-     - Enforces Max Daily Loss circuit breaker, daily trade count limits (overtrading guard), max position exposure, and an atomic emergency kill-switch (`flatten_all_and_lock()`).
-     - Tests: `tests/test_risk_sentinel.py` (circuit breaker trip, trade limit enforcement, emergency shutdown).
+   - **Step 2D.2: Lean Risk Sentinel (Pure Account-Level Kill-Switch & Airbag)**
+     - `src/risk/sentinel.py`: Ultra-lean broker proxy focused strictly on total account capital preservation (strategy-specific exits/stops stay 100% inside individual strategies).
+     - Implements 3 core capabilities:
+       1. **Master Emergency Kill-Switch (`kill_all()` / `/kill`)**: Cancels all open orders on the broker, flattens all open positions across the account at market price, disconnects the runner, and locks trading for the day.
+       2. **Automated Loss Airbag (`max_daily_loss` tripwire)**: Configurable threshold (INR or % of margin/equity, e.g. ₹3,500 / 4.5%–5% for MCX Aluminium Mini Lot). Automatically trips the Master Kill-Switch if total account daily loss breaches the threshold.
+       3. **Session Lock & Auto-Reset**: Persists lock state to disk for the rest of today; automatically resets at 08:30 AM next morning for the new trading day (with manual `--unlock` override).
+     - Tests: `tests/test_risk_sentinel.py` (manual kill switch, automated airbag tripwire, lock persistence, and morning auto-reset).
      - *Dependency: Builds directly on Step 2D.1.*
    - **Step 2D.3: Live 15m Candle Aggregator & Paper Strategy Runner**
      - `src/engine/live_candle_aggregator.py`: Ingests raw market ticks and dynamically constructs completed 15-minute OHLCV bars.
