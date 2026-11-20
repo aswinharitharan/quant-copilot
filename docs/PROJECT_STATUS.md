@@ -11,8 +11,9 @@
 - **Target Market**: Indian Equities, Futures & Options (NSE/MCX).
 - **Primary Broker Integrations**:
   - **Angel One (SmartAPI)**: 100% Free broker-grade historical data (10+ years depth, 15m/1m OHLCV, automated 2FA TOTP login via `pyotp`). Primary market data feed.
-  - **Dhan (DhanHQ)**: Trading API integration (execution and account management).
-  - **Local PaperBroker**: Virtual low-latency execution engine for forward testing.
+  - **Fyers (API v3)**: Primary live execution engine & forward-testing broker (100% Free Standard API, sub-50ms execution OMS, dedicated WebSocket Order & Trade Sockets, Futures Chain API for seamless MCX rollover, and native Market Price Protection).
+  - **Local PaperBroker**: Virtual low-latency execution engine for forward testing and dry-run validation.
+  - **DhanHQ / Zerodha Kite**: Secondary/Optional execution adapters (Dhan retains free order API but requires ₹499/mo data; Zerodha Personal tier is ₹0 for orders but ₹500/mo for data/ticks).
 - **Architecture**: Conversational AI Copilot -> Declarative Strategy DSL -> Deterministic Backtester -> Deployment Handshake -> Risk Sentinel -> Broker Adapter -> Scanner & Sentinel Services -> MCP Servers -> Dual-Pane Web UI.
 
 ---
@@ -22,7 +23,7 @@
 | Phase | Milestone Name | Status | Next Milestone |
 | :--- | :--- | :--- | :--- |
 | **Phase 0** | Architecture, Scaffolding, Documentation & Basement | ✅ Complete | Ready for Phase 1 implementation |
-| **Phase 1** | Quant Engine, Backtester, Paper Broker & Risk Sentinel | 🔄 In Progress | Milestone 1.4: Paper Broker & Risk Sentinel (Step 2D) |
+| **Phase 1** | Quant Engine, Backtester, Paper Broker & Risk Sentinel | 🔄 In Progress | Step 2D.1: Unified Broker Contracts & Paper Broker Engine |
 | **Phase 2** | Skills & MCP Modularization | ⏳ Pending | Expose Engine as MCP Server |
 | **Phase 3** | Web App Platform (Chat Copilot + Visual Dynamic Canvas) | ⏳ Pending | Full-stack Web UI Development |
 | **Phase 4** | Consumer Marketplace & Strategy Recommendation Engine | ⏳ Pending | Investor matching algorithm & catalog |
@@ -35,11 +36,11 @@
 1. **Declarative Strategy DSL over Raw Code Generation**
    - LLMs generate structured Pydantic models (Sets, Conditions, Legs, Universal Exit), NOT arbitrary Python execution scripts. Guarantees safety, syntax validity, and prevents lookahead bias.
 
-2. **DhanHQ Selected as Primary Indian Broker API**
-   - Free trading API, free 1-minute historical candles, free WebSocket ticks, and zero subscription fees for end users.
+2. **Fyers API v3 Selected as Primary Live Execution Broker**
+   - 100% Free Standard Plan for live order execution, sub-50ms OMS roundtrips, dedicated Order & Trade WebSockets for instant fill confirmations (zero REST polling lag), dedicated `futures_chain` API for automated MCX Aluminium rollover, and native Market Price Protection (MPP).
 
 3. **Broker Adapter Pattern (`BaseBroker`)**
-   - Decouples strategy logic from brokers. Seamlessly swaps between `PaperBroker`, `DhanClient`, and future Zerodha/AngelOne clients.
+   - Decouples strategy logic from brokers. Seamlessly swaps between `PaperBroker`, `FyersBroker`, `AngelBroker`, and optional `DhanClient`/`ZerodhaClient`.
 
 4. **Institutional "Deployment Handshake" (Post-Backtest Gate)**
    - Before any strategy deploys (Paper or Live), the AI conducts a structured, conversational confirmation covering:
@@ -69,16 +70,22 @@
    - Tradetron is recognized purely as a historical benchmark reference and potential third-party distribution marketplace; QuantCopilot operates as a self-contained autonomous quant platform.
    - Eliminates Tradetron subscription fees (₹1,500–₹3,000/month), execution queue latency (1–3 min delays), and clunky block-building UI. Direct broker connections execute in milliseconds.
 
-10. **Zero-Broker-Tax Model (Dhan + Angel One vs Zerodha)**
-    - Zerodha Kite Connect imposes a prohibitive ₹48,000/year "API tax" (₹2,000/mo trading + ₹2,000/mo historical) and forces fragile daily 6:00 AM manual browser logins.
-    - QuantCopilot leverages a **Dual Zero-Fee Setup**:
-      - **Angel One (SmartAPI)**: 100% Free 10+ year historical data + automated TOTP 2FA headless login.
-      - **Dhan (DhanHQ)**: 100% Free live execution API + 30-day persistent tokens + 10 orders/sec rate limit.
-    - Decoupled via `BaseBroker` adapter pattern: Zerodha/Upstox can be added later as optional user-facing connectors without modifying core quant logic.
+10. **Updated True Zero-Broker-Tax Model (Angel One Data + Fyers Execution)**
+    - Re-evaluated in Nov 2026: DhanHQ introduced a ₹499/mo fee for WebSocket data; Zerodha charges ₹500/mo for Kite Connect data (though Personal plan is ₹0 for orders).
+    - QuantCopilot leverages a **Dual Zero-Cost Institutional Stack**:
+      - **Angel One (SmartAPI)**: 100% Free 10+ year historical data + automated TOTP 2FA headless login (primary data feed & backtesting).
+      - **Fyers (API v3)**: 100% Free execution OMS + dedicated Order Sockets + clean MCX futures symbology + automated headless 2FA (primary execution).
+    - Single-Broker Option: Users can also run 100% on Angel One alone (both data and execution) or 100% on Fyers alone.
+    - Decoupled via `BaseBroker` adapter pattern: Zerodha/Dhan/Upstox remain supported as optional connectors without altering core quant logic.
 
-11. **Cloud-First Execution & Workplace Laptop Boundary**
-    - Personal automated trading bots must **never run on work/office laptops** due to enterprise IT policies, monitoring software, and aggressive sleep/lockout policies that sever order loops.
-    - QuantCopilot is designed to run 24/7 headlessly on an independent cloud VPS (AWS Free Tier EC2, Render, or a ₹350/mo Linux droplet) with instant Telegram/WhatsApp push alerts to the user's mobile phone.
+11. **Cloud-First Execution & Workplace Laptop Boundary (Mandatory Static IP)**
+    - Personal automated trading bots must **never run on work/office laptops** due to enterprise IT policies, monitoring software, and sleep/lockout policies that sever order loops.
+    - **SEBI Mandatory Static IP**: All major Indian brokers (Angel One, Fyers, Zerodha, Dhan) now mandate a registered Static IP for API order placement. Running from home or laptop dynamic IPs is prohibited by exchange gateways.
+    - QuantCopilot is architected to run 24/7 headlessly on a budget cloud VPS (e.g. **Vultr Mumbai ~₹300–₹600/mo** or AWS Mumbai with Elastic IP) featuring:
+      - Dedicated public Static IPv4 whitelisted with broker portals.
+      - Sub-10ms ping to NSE/MCX Mumbai data centers.
+      - Lightweight Ubuntu 22.04 LTS headless service managed by `systemd`.
+      - Instant Telegram push alerts for order fills, circuit breakers, and daily briefings to the user's mobile phone.
 
 12. **MCX Commodity Microstructure & Compulsory Delivery Safeguards**
     - MCX Base Metal futures (e.g. Aluminium 5 MT Big Lot / 1 MT Mini Lot) differ fundamentally from equities:
@@ -142,8 +149,33 @@ We execute Phase 1 in clear, self-contained chunks:
    - Runtime provider resolution (Angel One SmartAPI default, DhanHQ, YFinance, or custom instance).
    - Automated cache pruning/retention policy (`prune_cache` by age and disk budget with master file protection).
    - Tests: [`tests/test_smart_cache.py`](file:///Users/aswinkarthik.th/.gemini/antigravity-ide/scratch/quant-copilot/tests/test_smart_cache.py) (9/9 tests passing; 66/66 total suite passing).
-5. **Step 2D: Paper Broker & Risk Sentinel** (🔄 NEXT MILESTONE)
-   - `src/brokers/paper_broker.py` & `src/risk/sentinel.py` (Virtual order execution, tick subscriber, Max Daily Loss kill-switch).
+5. **Step 2D: Broker Layer, Risk Sentinel & Live Cloud Execution (Phased Breakdown)** (🔄 NEXT MILESTONE)
+   - **Step 2D.1: Unified Broker Contracts & Local Paper Broker Engine** (🔄 ACTIVE FOCUS)
+     - `src/brokers/base.py`: Abstract `BaseBroker` interface (`place_order`, `cancel_order`, `get_positions`, `get_balance`, `subscribe_ticks`) and Pydantic models (`OrderRequest`, `OrderResponse`, `Position`, `AccountBalance`, `OrderStatus`).
+     - `src/brokers/paper_broker.py`: Virtual ledger, simulated margin accounting, instant/limit order matching against live or replay ticks, realistic slippage modeling, and transaction cost deduction.
+     - Tests: `tests/test_paper_broker.py` (unit testing fills, margin limits, cancel/modify, and position tracking).
+     - *Dependency: 100% local, zero external credentials or cloud accounts required.*
+   - **Step 2D.2: Institutional Risk Sentinel (The Guardian)**
+     - `src/risk/sentinel.py`: Broker proxy decorator that inspects every outgoing order before it reaches any broker.
+     - Enforces Max Daily Loss circuit breaker, daily trade count limits (overtrading guard), max position exposure, and an atomic emergency kill-switch (`flatten_all_and_lock()`).
+     - Tests: `tests/test_risk_sentinel.py` (circuit breaker trip, trade limit enforcement, emergency shutdown).
+     - *Dependency: Builds directly on Step 2D.1.*
+   - **Step 2D.3: Live 15m Candle Aggregator & Paper Strategy Runner**
+     - `src/engine/live_candle_aggregator.py`: Ingests raw market ticks and dynamically constructs completed 15-minute OHLCV bars.
+     - `src/engine/live_runner.py`: Event-driven execution loop connecting the MCX Aluminium Enhanced 200 SMA strategy, `RiskSentinel`, and `PaperBroker`.
+     - Script: `scripts/run_paper_mcx_aluminium.py` for testing paper execution locally or in the cloud.
+     - Tests: `tests/test_live_runner.py`.
+     - *Dependency: Ingests live WebSocket ticks from Angel One or Fyers.*
+   - **Step 2D.4: Live Broker API Adapter (Fyers API v3)**
+     - `src/brokers/fyers_broker.py`: Concrete `BaseBroker` implementing Fyers API v3.
+     - Headless 2FA login (automated TOTP via `pyotp`), order placement with Market Price Protection (MPP), dedicated Order/Trade WebSocket push listeners (sub-50ms fill notifications), and `futures_chain` contract resolution.
+     - Tests: `tests/test_fyers_broker.py` (mocked HTTP/WS test suite + live integration tests).
+     - *Dependency: Fyers trading account and API credentials.*
+   - **Step 2D.5: Cloud Deployment & Process Guardian (24/7 Always-On)**
+     - `src/alerts/telegram_notifier.py`: Instant mobile push alerts for order fills, target hits, stop-loss exits, and circuit breaker events.
+     - `deploy/`: Headless VPS setup script (`deploy.sh`), `systemd` service configuration (`quantcopilot.service` for automatic crash restart and startup on boot).
+     - Static IP Whitelisting Guide for broker developer portals.
+     - *Dependency: Cloud VPS instance (e.g. Vultr Mumbai or AWS Mumbai).*
 
 ---
 

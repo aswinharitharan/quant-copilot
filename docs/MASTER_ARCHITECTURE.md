@@ -1,7 +1,7 @@
 # Master Architecture & Technical Specification
 
-> **Document Version**: 1.0.0  
-> **Target Market**: Indian Equities & Derivatives (NSE/BSE) via DhanHQ / Paper Broker  
+> **Document Version**: 1.1.0  
+> **Target Market**: Indian Equities & Derivatives (NSE/MCX) via Fyers API v3 / Angel One SmartAPI / Paper Broker  
 > **System Architecture**: Event-Driven, Decoupled Engine, MCP-Exposed, Dual-Pane Web UI  
 
 ---
@@ -36,8 +36,9 @@
 +-----------------------------------------▼-----------------------------------------+
 |                             BROKER ADAPTER LAYER                                  |
 |         BaseBroker (Interface) <──┬── PaperBroker (Local Simulation)              |
-|                                   ├── DhanClient (DhanHQ API)                     |
-|                                   └── [Future] ZerodhaClient / AngelOneClient     |
+|                                   ├── FyersBroker (Fyers API v3 - Execution)      |
+|                                   ├── AngelBroker (Angel One SmartAPI)            |
+|                                   └── [Optional] DhanClient / ZerodhaClient       |
 +-----------------------------------------------------------------------------------+
 ```
 
@@ -54,7 +55,7 @@ To prevent LLM hallucination and fatal syntax errors during live execution, stra
 * **Session & Execution**: Intraday auto-exit time (e.g., 15:15 IST), max trades per day, order type (`MARKET`, `LIMIT`).
 
 ### Module B: The Deterministic Backtester
-* **Data Ingestion**: Historical 1-minute/daily OHLCV candles fetched via DhanHQ API or local Parquet cache.
+* **Data Ingestion**: Historical 1-minute/15-minute/daily OHLCV candles fetched via Angel One SmartAPI (10+ yr depth), Fyers API v3, or local compressed Parquet cache (`SmartCacheManager`).
 * **Realistic Friction Modeling**:
   * Exchange Turnover Charges & STT (Securities Transaction Tax)
   * Brokerage calculations
@@ -95,8 +96,13 @@ class BaseBroker(ABC):
     @abstractmethod
     async def subscribe_ticks(self, symbols: list[str], callback) -> None: ...
 ```
-* **`PaperBroker`**: Runs locally with a virtual wallet (e.g., starting with ₹1,00,000), simulating realistic fills on real incoming live ticks.
-* **`DhanClient`**: Implemented using `dhanhq` Python SDK for zero-cost live orders and live tick WebSocket streams.
+* **`PaperBroker`**: Runs locally with a virtual wallet (e.g., starting with ₹1,00,000), simulating realistic fills, slippage, and PnL on real incoming live ticks or 15m candle closes.
+* **`FyersBroker`**: Primary live execution client via `fyers_apiv3` SDK. Features sub-50ms order routing, native Market Price Protection (MPP), dedicated WebSocket Order/Trade Sockets for instant fill callbacks, and automated headless TOTP authentication.
+* **`AngelBroker`**: Secondary live client and primary deep market data engine via `smartapi-python` (10+ year 15m/1m history, free WebSocket ticks).
+* **Cloud VPS Architecture (Always-On 24/7)**:
+  * Deployed on low-cost Linux cloud VPS (**Vultr Mumbai ~₹300–₹600/mo** or AWS Mumbai with Elastic IP).
+  * Whitelisted public **Static IPv4** required by SEBI/exchange regulations for automated order execution.
+  * Headless service managed by `systemd` daemon with automatic crash recovery and Telegram push alerts.
 
 ---
 
