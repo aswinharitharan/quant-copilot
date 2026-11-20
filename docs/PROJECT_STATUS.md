@@ -1,8 +1,8 @@
 # QuantCopilot Living Status & Context Registry
 
 > **Purpose**: Read this file at the start of any new chat session to instantly restore full project context with minimal token usage.  
-> **Last Updated**: 2026-11-19  
-> **Current Active Phase**: Phase 1 (Core Quant & Execution Engine) + 52-Week Low/High/Short Unified Orchestrator Complete (Low Capitulation + High Breakout + High Exhaustion Intraday MIS) + Enhanced 200 SMA on NSE & MCX Aluminium; **143/143 tests passing**  
+> **Last Updated**: 2026-11-20  
+> **Current Active Phase**: Phase 1 (Core Quant & Execution Engine) + Step 2D.1 Broker Contracts & PaperBroker Complete; **154/154 tests passing**  
 
 ---
 
@@ -23,7 +23,7 @@
 | Phase | Milestone Name | Status | Next Milestone |
 | :--- | :--- | :--- | :--- |
 | **Phase 0** | Architecture, Scaffolding, Documentation & Basement | ✅ Complete | Ready for Phase 1 implementation |
-| **Phase 1** | Quant Engine, Backtester, Paper Broker & Risk Sentinel | 🔄 In Progress | Step 2D.1: Unified Broker Contracts & Paper Broker Engine |
+| **Phase 1** | Quant Engine, Backtester, Paper Broker & Risk Sentinel | 🔄 In Progress | Step 2D.2: Lean Risk Sentinel (Account Kill-Switch & Airbag) |
 | **Phase 2** | Skills & MCP Modularization | ⏳ Pending | Expose Engine as MCP Server |
 | **Phase 3** | Web App Platform (Chat Copilot + Visual Dynamic Canvas) | ⏳ Pending | Full-stack Web UI Development |
 | **Phase 4** | Consumer Marketplace & Strategy Recommendation Engine | ⏳ Pending | Investor matching algorithm & catalog |
@@ -149,13 +149,13 @@ We execute Phase 1 in clear, self-contained chunks:
    - Runtime provider resolution (Angel One SmartAPI default, DhanHQ, YFinance, or custom instance).
    - Automated cache pruning/retention policy (`prune_cache` by age and disk budget with master file protection).
    - Tests: [`tests/test_smart_cache.py`](file:///Users/aswinkarthik.th/.gemini/antigravity-ide/scratch/quant-copilot/tests/test_smart_cache.py) (9/9 tests passing; 66/66 total suite passing).
-5. **Step 2D: Broker Layer, Risk Sentinel & Live Cloud Execution (Phased Breakdown)** (🔄 NEXT MILESTONE)
-   - **Step 2D.1: Unified Broker Contracts & Local Paper Broker Engine** (🔄 ACTIVE FOCUS)
-     - `src/brokers/base.py`: Abstract `BaseBroker` interface (`place_order`, `cancel_order`, `get_positions`, `get_balance`, `subscribe_ticks`) and Pydantic models (`OrderRequest`, `OrderResponse`, `Position`, `AccountBalance`, `OrderStatus`).
-     - `src/brokers/paper_broker.py`: Virtual ledger, simulated margin accounting, instant/limit order matching against live or replay ticks, realistic slippage modeling, and transaction cost deduction.
-     - Tests: `tests/test_paper_broker.py` (unit testing fills, margin limits, cancel/modify, and position tracking).
+5. **Step 2D: Broker Layer, Risk Sentinel & Live Cloud Execution (Phased Breakdown)** (🔄 IN PROGRESS)
+   - **Step 2D.1: Unified Broker Contracts & Local Paper Broker Engine** (✅ COMPLETE)
+     - [`src/brokers/base.py`](file:///Users/aswinkarthik.th/.gemini/antigravity-ide/scratch/quant-copilot/src/brokers/base.py): Abstract `BaseBroker` interface (`place_order`, `cancel_order`, `get_positions`, `get_balance`, `subscribe_ticks`) and Pydantic models (`OrderRequest`, `OrderResponse`, `Position`, `AccountBalance`, `OrderStatus`, `ProductType`).
+     - [`src/brokers/paper_broker.py`](file:///Users/aswinkarthik.th/.gemini/antigravity-ide/scratch/quant-copilot/src/brokers/paper_broker.py): High-fidelity virtual execution engine with dynamic order matching (LIMIT/MARKET), mark-to-market valuations, position lifecycle (open, add, reduce, flip), margin validation, and transaction friction via `TransactionCostModel`.
+     - Tests: [`tests/test_paper_broker.py`](file:///Users/aswinkarthik.th/.gemini/antigravity-ide/scratch/quant-copilot/tests/test_paper_broker.py) (10/10 tests passing; **153/153 total project suite passing**).
      - *Dependency: 100% local, zero external credentials or cloud accounts required.*
-   - **Step 2D.2: Lean Risk Sentinel (Pure Account-Level Kill-Switch & Airbag)**
+   - **Step 2D.2: Lean Risk Sentinel (Pure Account-Level Kill-Switch & Airbag)** (🔄 NEXT MILESTONE)
      - `src/risk/sentinel.py`: Ultra-lean broker proxy focused strictly on total account capital preservation (strategy-specific exits/stops stay 100% inside individual strategies).
      - Implements 3 core capabilities:
        1. **Master Emergency Kill-Switch (`kill_all()` / `/kill`)**: Cancels all open orders on the broker, flattens all open positions across the account at market price, disconnects the runner, and locks trading for the day.
