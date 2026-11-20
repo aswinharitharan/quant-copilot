@@ -249,3 +249,4 @@ The complete 13,244-candle audit, trade-by-trade logs, and monthly PnL breakdown
 3. **Mini Lot is Recommended for Capital Under ₹3 Lakhs**:
    - `ALUMINI` (1 MT) requires only **₹75,000** margin, generated **+₹25,424 Net PnL** (+33.9% return), and kept maximum loss per trade under ₹2,600.
 4. **Physical Delivery Rule is Non-Negotiable**: Always enforce `DTE <= 6` on MCX base metals to avoid tender period margin spikes and physical warehouse delivery obligations.
+
