@@ -33,12 +33,22 @@ from src.schema.strategy import (
 )
 
 
-def get_mcx_aluminium_200_sma_enhanced_strategy(is_mini: bool = False) -> StrategyDefinition:
+from typing import Optional
+
+def get_mcx_aluminium_200_sma_enhanced_strategy(
+    is_mini: bool = False,
+    lots: int = 1,
+    capital_allocated: Optional[float] = None,
+    max_daily_loss: Optional[float] = None,
+) -> StrategyDefinition:
     """
     Build the Enhanced MCX Aluminium 200 SMA 15m Futures strategy definition.
     
     Args:
         is_mini: If True, uses ALUMINI (1 MT = 1,000 kg). If False, uses ALUMINIUM (5 MT = 5,000 kg).
+        lots: Number of lots/contracts to trade per signal (default: 1).
+        capital_allocated: Total margin buffer allocated (defaults to ₹75k * lots for Mini, ₹300k * lots for Big).
+        max_daily_loss: Max daily loss threshold for circuit breaker.
     """
     lot_size = 1000 if is_mini else 5000
     underlying = "ALUMINI" if is_mini else "ALUMINIUM"
@@ -101,12 +111,12 @@ def get_mcx_aluminium_200_sma_enhanced_strategy(is_mini: bool = False) -> Strate
         conditions=[close_cross_over_sma],
     )
 
-    # Legs (1 Lot)
+    # Legs
     long_leg = Leg(
         leg_id="leg_long",
         instrument_type=InstrumentType.FUTURES,
         action=OrderAction.BUY,
-        lots=1,
+        lots=lots,
         expiry_type=ExpiryType.MONTHLY,
         leg_stop_loss_pct=0.008,
         leg_target_pct=0.015,
@@ -115,7 +125,7 @@ def get_mcx_aluminium_200_sma_enhanced_strategy(is_mini: bool = False) -> Strate
         leg_id="leg_short",
         instrument_type=InstrumentType.FUTURES,
         action=OrderAction.SELL,
-        lots=1,
+        lots=lots,
         expiry_type=ExpiryType.MONTHLY,
         leg_stop_loss_pct=0.008,
         leg_target_pct=0.015,
@@ -136,8 +146,11 @@ def get_mcx_aluminium_200_sma_enhanced_strategy(is_mini: bool = False) -> Strate
         legs=[short_leg],
     )
 
-    cap = 75000.0 if is_mini else 300000.0
-    max_loss = 6000.0 if is_mini else 25000.0
+    default_cap = (75000.0 if is_mini else 300000.0) * lots
+    default_max_loss = (3500.0 if is_mini else 15000.0) * lots
+
+    cap = capital_allocated if capital_allocated is not None else default_cap
+    max_loss = max_daily_loss if max_daily_loss is not None else default_max_loss
 
     deployment = DeploymentSettings(
         capital_allocated=cap,
